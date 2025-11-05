@@ -244,6 +244,7 @@
 		canBookImmediately: false, // Whether booking can happen right now
 		selectedIndoorField: null, // The selected indoor field number (1-3)
 		selectedOutdoorField: null, // The selected outdoor field number (1-5)
+		timeCheckInterval: null, // Interval to check if booking time has passed
 	};
 
 	// ===== UI OVERLAY =====
@@ -693,12 +694,15 @@
 		if (state.prepTimer) clearTimeout(state.prepTimer);
 		if (state.bookingTimer) clearTimeout(state.bookingTimer);
 		if (state.scanInterval) clearInterval(state.scanInterval);
+		if (state.timeCheckInterval) clearInterval(state.timeCheckInterval);
 		stopCountdown();
+		stopTimeChecking();
 
 		// Clear scheduled times and booking state
 		state.prepTime = null;
 		state.bookingTime = null;
 		state.scanInterval = null;
+		state.timeCheckInterval = null;
 		state.selectedDate = null;
 		state.canBookImmediately = false;
 
@@ -1108,6 +1112,73 @@
 		return bookingOpenDate;
 	}
 
+	// ===== TIME CHECKING & RECOVERY =====
+	/**
+	 * Check if scheduled prep or booking time has passed (handles sleep/wake)
+	 */
+	function checkScheduledTimes() {
+		if (!state.selectedSlot) return;
+		if (state.canBookImmediately) return; // No scheduled times
+		if (state.status === 'success' || state.status === 'error') return; // Already done
+
+		const now = Date.now();
+
+		// Check if we missed the booking time
+		if (state.bookingTime && now >= state.bookingTime) {
+			if (state.status !== 'booking' && state.status !== 'ready') {
+				console.warn(
+					'⚠️ Booking time passed! Executing now (recovered from sleep/throttle)',
+				);
+				// Clear timers since we're executing manually
+				if (state.prepTimer) clearTimeout(state.prepTimer);
+				if (state.bookingTimer) clearTimeout(state.bookingTimer);
+				executeBooking();
+			}
+			return;
+		}
+
+		// Check if we missed the prep time
+		if (state.prepTime && now >= state.prepTime) {
+			if (state.status === 'idle') {
+				console.warn(
+					'⚠️ Prep time passed! Preparing now (recovered from sleep/throttle)',
+				);
+				// Clear prep timer since we're executing manually
+				if (state.prepTimer) clearTimeout(state.prepTimer);
+				prepareBooking();
+			}
+		}
+	}
+
+	/**
+	 * Start periodic time checking (every 20 seconds)
+	 * This is a safety net - the prep step at 8:59 isn't time-critical,
+	 * only the 9:00 booking matters. 20 seconds gives 3 chances in the
+	 * critical minute before booking.
+	 */
+	function startTimeChecking() {
+		// Clear any existing interval
+		if (state.timeCheckInterval) {
+			clearInterval(state.timeCheckInterval);
+		}
+
+		// Check every 20 seconds
+		state.timeCheckInterval = setInterval(checkScheduledTimes, 20000);
+
+		// Also check immediately
+		checkScheduledTimes();
+	}
+
+	/**
+	 * Stop periodic time checking
+	 */
+	function stopTimeChecking() {
+		if (state.timeCheckInterval) {
+			clearInterval(state.timeCheckInterval);
+			state.timeCheckInterval = null;
+		}
+	}
+
 	function scheduleBooking() {
 		if (!state.selectedSlot) {
 			console.log('No slot selected, cannot schedule');
@@ -1128,6 +1199,7 @@
 		if (state.prepTimer) clearTimeout(state.prepTimer);
 		if (state.bookingTimer) clearTimeout(state.bookingTimer);
 		stopCountdown();
+		stopTimeChecking();
 
 		// Determine if we can book immediately or need to schedule
 		state.selectedDate = getSelectedDate();
@@ -1164,6 +1236,9 @@
 
 			// Start the countdown display
 			startCountdown();
+
+			// Start time checking for sleep/wake recovery
+			startTimeChecking();
 
 			const bookingDate = new Date(state.bookingTime);
 			console.log(
@@ -1267,6 +1342,14 @@
 
 		// Setup monitoring for slots
 		setupSlotMonitoring();
+
+		// Setup visibility change listener for sleep/wake detection
+		document.addEventListener('visibilitychange', () => {
+			if (document.visibilityState === 'visible') {
+				console.log('Tab became visible - checking scheduled times...');
+				checkScheduledTimes();
+			}
+		});
 
 		console.log('Sportkot Automator: Ready!');
 	}
