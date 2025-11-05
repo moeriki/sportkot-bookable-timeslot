@@ -104,7 +104,7 @@
 					position: fixed;
 					bottom: 20px;
 					right: 20px;
-					width: 350px;
+					width: 500px;
 					max-height: 600px;
 					background: white;
 					border: 2px solid #333;
@@ -143,12 +143,20 @@
 					flex: 1;
 					overflow-y: auto;
 					padding: 8px;
+					display: grid;
+					gap: 8px;
+					align-content: start;
+				}
+				.sa-slots.one-column {
+					grid-template-columns: 1fr;
+				}
+				.sa-slots.two-columns {
+					grid-template-columns: 1fr 1fr;
 				}
 				.sa-slot {
 					border: 1px solid #ddd;
 					border-radius: 4px;
 					padding: 10px;
-					margin-bottom: 8px;
 					cursor: pointer;
 					transition: all 0.2s;
 				}
@@ -171,11 +179,29 @@
 					color: #666;
 					margin-top: 4px;
 				}
+				.sa-time-header {
+					font-weight: bold;
+					font-size: 14px;
+					color: #333;
+					padding: 8px;
+					background: #f8f9fa;
+					border-radius: 4px;
+					text-align: center;
+					grid-column: 1 / -1;
+				}
+				.sa-slot-empty {
+					border: 1px dashed #ddd;
+					border-radius: 4px;
+					padding: 10px;
+					background: #fafafa;
+					opacity: 0.5;
+				}
 				.sa-empty {
 					padding: 20px;
 					text-align: center;
 					color: #999;
 					font-style: italic;
+					grid-column: 1 / -1;
 				}
 				.sa-footer {
 					padding: 12px;
@@ -194,8 +220,8 @@
 				<div class="sa-empty">No slots detected. Select a day to see available slots.</div>
 			</div>
 			<div class="sa-footer">
-				Prep: ${CONFIG.PREP_TIME.hour}:${String(CONFIG.PREP_TIME.minute).padStart(2, '0')} |
-				Book: ${CONFIG.BOOKING_TIME.hour}:${String(CONFIG.BOOKING_TIME.minute).padStart(2, '0')}
+				Preparation: ${CONFIG.PREP_TIME.hour}:${String(CONFIG.PREP_TIME.minute).padStart(2, '0')} |
+				Booking: ${CONFIG.BOOKING_TIME.hour}:${String(CONFIG.BOOKING_TIME.minute).padStart(2, '0')}
 			</div>
 		`;
 
@@ -239,7 +265,7 @@
 			const remaining = state.prepTime - now;
 			updateStatus(
 				'idle',
-				`⏰ Preparing modal in ${formatTimeRemaining(remaining)}`,
+				`⏰ Preparing booking in ${formatTimeRemaining(remaining)}`,
 			);
 		} else if (state.bookingTime && now < state.bookingTime) {
 			// Booking is upcoming (prep already happened or is happening)
@@ -275,26 +301,120 @@
 		}
 	}
 
+	function resetState() {
+		// Clear selection
+		state.selectedSlot = null;
+		state.availableSlots = [];
+		state.hasFoundSlots = false;
+
+		// Clear timers
+		if (state.prepTimer) clearTimeout(state.prepTimer);
+		if (state.bookingTimer) clearTimeout(state.bookingTimer);
+		if (state.scanInterval) clearInterval(state.scanInterval);
+		stopCountdown();
+
+		// Clear scheduled times
+		state.prepTime = null;
+		state.bookingTime = null;
+		state.scanInterval = null;
+
+		// Reset UI
+		renderSlots();
+		updateStatus('idle', 'Scanning for slots...');
+	}
+
 	function renderSlots() {
 		const slotsContainer = document.getElementById('sa-slots');
 		if (!slotsContainer) return;
 
 		if (state.availableSlots.length === 0) {
+			slotsContainer.className = 'sa-slots one-column';
 			slotsContainer.innerHTML =
 				'<div class="sa-empty">No slots detected. Select a day to see available slots.</div>';
 			return;
 		}
 
-		slotsContainer.innerHTML = state.availableSlots
-			.map(
-				(slot, index) => `
-			<div class="sa-slot ${state.selectedSlot === slot ? 'selected' : ''}" data-slot-index="${index}">
-				<div class="sa-slot-time">${slot.time}</div>
-				<div class="sa-slot-title">${slot.title}</div>
-			</div>
-		`,
-			)
-			.join('');
+		// Organize slots by time and type (indoor/outdoor)
+		const slotsByTime = {};
+		let hasIndoor = false;
+		let hasOutdoor = false;
+
+		state.availableSlots.forEach((slot) => {
+			const time = slot.time;
+			const isIndoor = slot.title.toLowerCase().includes('indoor');
+			const isOutdoor = slot.title.toLowerCase().includes('outdoor');
+
+			if (isIndoor) hasIndoor = true;
+			if (isOutdoor) hasOutdoor = true;
+
+			if (!slotsByTime[time]) {
+				slotsByTime[time] = { indoor: null, outdoor: null };
+			}
+
+			if (isIndoor) {
+				slotsByTime[time].indoor = slot;
+			} else if (isOutdoor) {
+				slotsByTime[time].outdoor = slot;
+			}
+		});
+
+		// Determine layout
+		const twoColumns = hasIndoor && hasOutdoor;
+		slotsContainer.className = twoColumns
+			? 'sa-slots two-columns'
+			: 'sa-slots one-column';
+
+		// Sort times
+		const times = Object.keys(slotsByTime).sort();
+
+		// Build HTML
+		let html = '';
+		times.forEach((time) => {
+			const slots = slotsByTime[time];
+			const slotIndex = (slot) =>
+				state.availableSlots.findIndex((s) => s === slot);
+
+			if (twoColumns) {
+				// Two column layout: Indoor | Outdoor
+				const indoorSlot = slots.indoor;
+				const outdoorSlot = slots.outdoor;
+
+				if (indoorSlot) {
+					html += `
+						<div class="sa-slot ${state.selectedSlot === indoorSlot ? 'selected' : ''}" data-slot-index="${slotIndex(indoorSlot)}">
+							<div class="sa-slot-time">${indoorSlot.time}</div>
+							<div class="sa-slot-title">${indoorSlot.title}</div>
+						</div>
+					`;
+				} else {
+					html += '<div class="sa-slot-empty"></div>';
+				}
+
+				if (outdoorSlot) {
+					html += `
+						<div class="sa-slot ${state.selectedSlot === outdoorSlot ? 'selected' : ''}" data-slot-index="${slotIndex(outdoorSlot)}">
+							<div class="sa-slot-time">${outdoorSlot.time}</div>
+							<div class="sa-slot-title">${outdoorSlot.title}</div>
+						</div>
+					`;
+				} else {
+					html += '<div class="sa-slot-empty"></div>';
+				}
+			} else {
+				// Single column layout
+				const slot = slots.indoor || slots.outdoor;
+				if (slot) {
+					html += `
+						<div class="sa-slot ${state.selectedSlot === slot ? 'selected' : ''}" data-slot-index="${slotIndex(slot)}">
+							<div class="sa-slot-time">${slot.time}</div>
+							<div class="sa-slot-title">${slot.title}</div>
+						</div>
+					`;
+				}
+			}
+		});
+
+		slotsContainer.innerHTML = html;
 
 		// Add click handlers
 		slotsContainer.querySelectorAll('.sa-slot').forEach((el) => {
@@ -370,18 +490,33 @@
 
 		if (slotListContainer) {
 			const observer = new MutationObserver(() => {
-				console.log('Slot list changed, rescanning...');
-				// Reset the found flag when content changes
-				state.hasFoundSlots = false;
-				scanForSlots();
+				console.log('Slot list changed, resetting state and rescanning...');
 
-				// Restart interval scanning if needed
-				if (!state.scanInterval && !state.hasFoundSlots) {
+				// Clear selection and timers since content changed
+				if (state.selectedSlot) {
+					resetState();
+
+					// Restart scanning
 					state.scanInterval = setInterval(() => {
 						if (!state.hasFoundSlots) {
 							scanForSlots();
 						}
 					}, 2000);
+
+					setTimeout(scanForSlots, 500);
+				} else {
+					// Just reset found flag if nothing was selected
+					state.hasFoundSlots = false;
+					scanForSlots();
+
+					// Restart interval scanning if needed
+					if (!state.scanInterval) {
+						state.scanInterval = setInterval(() => {
+							if (!state.hasFoundSlots) {
+								scanForSlots();
+							}
+						}, 2000);
+					}
 				}
 			});
 
@@ -391,40 +526,30 @@
 			});
 		}
 
-		// Also monitor day selector clicks
-		const daySelectorButtons = document.querySelectorAll(
-			CONFIG.SELECTORS.daySelectorButtons,
-		);
+		// Also monitor day selector clicks using event delegation
+		// This works even if buttons are dynamically added
+		document.addEventListener('click', (event) => {
+			const daySelectorButton = event.target.closest(
+				CONFIG.SELECTORS.daySelectorButtons,
+			);
 
-		daySelectorButtons.forEach((button) => {
-			button.addEventListener('click', () => {
+			if (daySelectorButton) {
 				console.log(
-					'Day selector clicked, clearing selection and rescanning...',
+					'Day selector clicked, clearing all state and rescanning...',
 				);
-				// Clear selection and reset state
-				state.selectedSlot = null;
-				state.hasFoundSlots = false;
-				state.availableSlots = [];
-				renderSlots();
 
-				// Clear any scheduled bookings
-				if (state.prepTimer) clearTimeout(state.prepTimer);
-				if (state.bookingTimer) clearTimeout(state.bookingTimer);
-				stopCountdown();
-
-				updateStatus('idle', 'Scanning for slots...');
+				// Use the reset function to clear everything
+				resetState();
 
 				// Start scanning again
-				if (!state.scanInterval) {
-					state.scanInterval = setInterval(() => {
-						if (!state.hasFoundSlots) {
-							scanForSlots();
-						}
-					}, 2000);
-				}
+				state.scanInterval = setInterval(() => {
+					if (!state.hasFoundSlots) {
+						scanForSlots();
+					}
+				}, 2000);
 
 				setTimeout(scanForSlots, 500);
-			});
+			}
 		});
 	}
 
@@ -490,7 +615,7 @@
 			return;
 		}
 
-		updateStatus('preparing', '🔄 Opening modal and preparing booking...');
+		updateStatus('preparing', '🔄 Preparing reservation...');
 
 		// Click the reserve button to open the modal
 		state.selectedSlot.button.click();
