@@ -1,0 +1,26 @@
+{
+	"name": "sportkot-bookable-timeslot",
+	"version": "1.0.0",
+	"private": true,
+	"main": "index.js",
+	"scripts": {
+		"format": "oxfmt . && prettier --write *.json",
+		"lint": "oxlint --fix .",
+		"test": "oxfmt --check . && prettier --check *.json && oxlint ."
+	},
+	"prettier": {
+		"arrowParens": "always",
+		"plugins": [
+			"prettier-plugin-packagejson"
+		],
+		"singleQuote": true,
+		"useTabs": true
+	},
+	"devDependencies": {
+		"oxfmt": "0.9.0",
+		"oxlint": "^1.25.0",
+		"prettier": "^3.6.2",
+		"prettier-plugin-packagejson": "^2.5.19"
+	},
+	"packageManager": "pnpm@10.20.0+sha256.47a3352808501b8d1ef20112273b6a5dcfa53d28a55bcce36d268e878bd6bfe9"
+}

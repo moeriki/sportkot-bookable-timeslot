@@ -1,0 +1,4 @@
+{
+	"ignorePatterns": ["node_modules/"],
+	"plugins": ["eslint", "oxc", "unicorn"]
+}
