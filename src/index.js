@@ -92,6 +92,8 @@
 		countdownInterval: null,
 		prepTime: null,
 		bookingTime: null,
+		selectedDate: null, // The date of the selected slot
+		canBookImmediately: false, // Whether booking can happen right now
 	};
 
 	// ===== UI OVERLAY =====
@@ -135,6 +137,7 @@
 					display: flex;
 					justify-content: space-between;
 					align-items: center;
+					gap: 16px;
 				}
 				.sa-status-text {
 					flex: 1;
@@ -149,6 +152,17 @@
 					font-weight: bold;
 					cursor: pointer;
 					transition: background 0.2s;
+					white-space: nowrap;
+				}
+				.sa-book-now-btn.secondary {
+					background: #6c757d;
+					color: white;
+				}
+				.sa-book-now-btn.secondary:hover {
+					background: #5a6268;
+				}
+				.sa-book-now-btn.secondary:active {
+					background: #545b62;
 				}
 				.sa-book-now-btn:hover {
 					background: #218838;
@@ -278,7 +292,10 @@
 			// Add "Book Now" button if requested
 			if (showBookNowButton) {
 				const bookNowBtn = document.createElement('button');
-				bookNowBtn.className = 'sa-book-now-btn';
+				bookNowBtn.className =
+					showBookNowButton === 'secondary'
+						? 'sa-book-now-btn secondary'
+						: 'sa-book-now-btn';
 				bookNowBtn.textContent = 'Book Now';
 				bookNowBtn.onclick = bookNowManual;
 				statusEl.appendChild(bookNowBtn);
@@ -292,10 +309,19 @@
 		const minutes = Math.floor((totalSeconds % 3600) / 60);
 		const seconds = totalSeconds % 60;
 
+		// Only show seconds if under 5 minutes
+		const showSeconds = totalSeconds < 300; // 5 minutes = 300 seconds
+
 		if (hours > 0) {
-			return `${hours}h ${minutes}m ${seconds}s`;
+			if (showSeconds && hours === 0) {
+				return `${minutes}m ${seconds}s`;
+			}
+			return `${hours}h ${minutes}m`;
 		} else if (minutes > 0) {
-			return `${minutes}m ${seconds}s`;
+			if (showSeconds) {
+				return `${minutes}m ${seconds}s`;
+			}
+			return `${minutes}m`;
 		} else {
 			return `${seconds}s`;
 		}
@@ -303,6 +329,7 @@
 
 	function updateCountdown() {
 		if (!state.selectedSlot) return;
+		if (state.canBookImmediately) return; // Don't show countdown for immediate booking
 
 		const now = Date.now();
 
@@ -310,10 +337,17 @@
 		if (state.prepTime && now < state.prepTime) {
 			// Prep is upcoming
 			const remaining = state.prepTime - now;
+			const prepDate = new Date(state.prepTime);
+			const dateStr = prepDate.toLocaleDateString('en-US', {
+				month: 'short',
+				day: 'numeric',
+				hour: '2-digit',
+				minute: '2-digit',
+			});
 			updateStatus(
 				'idle',
-				`⏰ Preparing booking in ${formatTimeRemaining(remaining)}`,
-				true, // Show "Book Now" button
+				`⏰ Preparing booking in ${formatTimeRemaining(remaining)} (at ${dateStr})`,
+				'secondary', // Show "Book Now" button as secondary action
 			);
 		} else if (state.bookingTime && now < state.bookingTime) {
 			// Booking is upcoming (prep already happened or is happening)
@@ -322,13 +356,13 @@
 				updateStatus(
 					'ready',
 					`✅ Ready! Booking in ${formatTimeRemaining(remaining)}`,
-					true, // Show "Book Now" button
+					'secondary', // Show "Book Now" button as secondary action
 				);
 			} else {
 				updateStatus(
 					'idle',
 					`⏰ Booking in ${formatTimeRemaining(remaining)}`,
-					true, // Show "Book Now" button
+					'secondary', // Show "Book Now" button as secondary action
 				);
 			}
 		}
@@ -428,10 +462,12 @@
 		if (state.scanInterval) clearInterval(state.scanInterval);
 		stopCountdown();
 
-		// Clear scheduled times
+		// Clear scheduled times and booking state
 		state.prepTime = null;
 		state.bookingTime = null;
 		state.scanInterval = null;
+		state.selectedDate = null;
+		state.canBookImmediately = false;
 
 		// Reset UI
 		renderSlots();
@@ -669,17 +705,77 @@
 	}
 
 	// ===== TIME-BASED SCHEDULING =====
-	function getTimeUntil(targetHour, targetMinute) {
-		const now = new Date();
-		const target = new Date();
-		target.setHours(targetHour, targetMinute, 0, 0);
+	function getSelectedDate() {
+		// Try to find the active day selector button
+		const activeButton = document.querySelector(
+			`${CONFIG.SELECTORS.daySelectorButtons}.active, ${CONFIG.SELECTORS.daySelectorButtons}[aria-pressed="true"], ${CONFIG.SELECTORS.daySelectorButtons}.btn-primary`,
+		);
 
-		// If target time has passed today, schedule for tomorrow
-		if (target <= now) {
-			target.setDate(target.getDate() + 1);
+		if (activeButton) {
+			// Try to extract date from data attributes
+			const dateAttr = activeButton.getAttribute('data-date');
+			if (dateAttr) {
+				return new Date(dateAttr);
+			}
+
+			// Try to parse from button text
+			const buttonText = activeButton.textContent.trim();
+			// Look for patterns like "Do 6-11" or similar
+			const dateMatch = buttonText.match(/(\d+)-(\d+)/);
+			if (dateMatch) {
+				const day = parseInt(dateMatch[1]);
+				const month = parseInt(dateMatch[2]) - 1; // Month is 0-indexed
+				const year = new Date().getFullYear();
+				return new Date(year, month, day);
+			}
 		}
 
-		return target.getTime() - now.getTime();
+		// Fallback: assume today if we can't determine
+		console.warn('Could not determine selected date, defaulting to today');
+		return new Date();
+	}
+	function canBookImmediately() {
+		const now = new Date();
+		const selectedDate = getSelectedDate();
+
+		// Normalize dates to compare just the day (ignore time)
+		const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+		const tomorrow = new Date(today);
+		tomorrow.setDate(tomorrow.getDate() + 1);
+		const selectedDay = new Date(
+			selectedDate.getFullYear(),
+			selectedDate.getMonth(),
+			selectedDate.getDate(),
+		);
+
+		// Check if it's already 9 AM or later today
+		const currentHour = now.getHours();
+		const currentMinute = now.getMinutes();
+		const isPast9AM =
+			currentHour > 9 || (currentHour === 9 && currentMinute >= 0);
+
+		// Scenario 1: Selected date is today
+		if (selectedDay.getTime() === today.getTime()) {
+			return true;
+		}
+
+		// Scenario 2: Selected date is tomorrow AND it's already past 9 AM today
+		if (selectedDay.getTime() === tomorrow.getTime() && isPast9AM) {
+			return true;
+		}
+
+		// Otherwise, booking needs to be scheduled
+		return false;
+	}
+
+	function getBookingOpenTime() {
+		// Booking opens at 9 AM the day before the selected date
+		const selectedDate = getSelectedDate();
+		const bookingOpenDate = new Date(selectedDate);
+		bookingOpenDate.setDate(bookingOpenDate.getDate() - 1);
+		bookingOpenDate.setHours(9, 0, 0, 0);
+
+		return bookingOpenDate;
 	}
 
 	function scheduleBooking() {
@@ -693,35 +789,47 @@
 		if (state.bookingTimer) clearTimeout(state.bookingTimer);
 		stopCountdown();
 
-		const prepDelay = getTimeUntil(
-			CONFIG.PREP_TIME.hour,
-			CONFIG.PREP_TIME.minute,
-		);
-		const bookingDelay = getTimeUntil(
-			CONFIG.BOOKING_TIME.hour,
-			CONFIG.BOOKING_TIME.minute,
-		);
+		// Determine if we can book immediately or need to schedule
+		state.selectedDate = getSelectedDate();
+		state.canBookImmediately = canBookImmediately();
 
-		// Store the exact times
-		state.prepTime = Date.now() + prepDelay;
-		state.bookingTime = Date.now() + bookingDelay;
+		if (state.canBookImmediately) {
+			// Booking is available now - show "Book Now" button without countdown
+			updateStatus(
+				'idle',
+				`✅ Ready to book`,
+				true, // Show "Book Now" button
+			);
+			console.log('Booking available immediately');
+		} else {
+			// Booking needs to be scheduled
+			const bookingOpenTime = getBookingOpenTime();
+			const now = Date.now();
+			const prepDelay = bookingOpenTime.getTime() - 60000 - now; // 1 minute before booking opens
+			const bookingDelay = bookingOpenTime.getTime() - now;
 
-		// Schedule preparation
-		state.prepTimer = setTimeout(() => {
-			prepareBooking();
-		}, prepDelay);
+			// Store the exact times
+			state.prepTime = now + prepDelay;
+			state.bookingTime = now + bookingDelay;
 
-		// Schedule actual booking
-		state.bookingTimer = setTimeout(() => {
-			executeBooking();
-		}, bookingDelay);
+			// Schedule preparation
+			state.prepTimer = setTimeout(() => {
+				prepareBooking();
+			}, prepDelay);
 
-		// Start the countdown display
-		startCountdown();
+			// Schedule actual booking
+			state.bookingTimer = setTimeout(() => {
+				executeBooking();
+			}, bookingDelay);
 
-		console.log(
-			`Booking scheduled - Prep in ${Math.round(prepDelay / 1000)}s, Book in ${Math.round(bookingDelay / 1000)}s`,
-		);
+			// Start the countdown display
+			startCountdown();
+
+			const bookingDate = new Date(state.bookingTime);
+			console.log(
+				`Booking scheduled for ${bookingDate.toLocaleString()} - Prep in ${Math.round(prepDelay / 1000)}s, Book in ${Math.round(bookingDelay / 1000)}s`,
+			);
+		}
 	}
 
 	function prepareBooking() {
