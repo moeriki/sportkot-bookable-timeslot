@@ -18,6 +18,11 @@
 		PREP_TIME: { hour: 8, minute: 59 },
 		// Time when actual booking can be executed
 		BOOKING_TIME: { hour: 9, minute: 0 },
+		// Field options by type
+		FIELD_OPTIONS: {
+			indoor: [1, 2, 3],
+			outdoor: [1, 2, 3, 4, 5],
+		},
 		// Selectors for page elements
 		SELECTORS: {
 			daySelectorButtons: 'day-selector .btn[data-test-id-day-selector]',
@@ -80,6 +85,52 @@
 		return { selectInput, button };
 	}
 
+	/**
+	 * Select a field in the modal dropdown
+	 * @param {HTMLInputElement} selectInput
+	 * @param {number} fieldNumber
+	 */
+	function selectFieldInModal(selectInput, fieldNumber) {
+		// Determine field type from selected slot
+		const isIndoor = state.selectedSlot.title.toLowerCase().includes('indoor');
+		const fieldType = isIndoor ? 'Indoor' : 'Outdoor';
+
+		// Try to find and select the option that matches
+		// The options typically follow a pattern like "Beachvolley 1", "B&FH Indoor Beachvolley 1", etc.
+		const optionPatterns = [
+			`Beachvolley ${fieldNumber}`,
+			`${fieldType} Beachvolley ${fieldNumber}`,
+			`B&FH ${fieldType} Beachvolley ${fieldNumber}`,
+		];
+
+		// Focus and click the input to open dropdown
+		selectInput.focus();
+		selectInput.click();
+
+		// Wait a moment for dropdown to populate, then select option
+		setTimeout(() => {
+			// Try to find matching option in the dropdown
+			const options = document.querySelectorAll(
+				'product-select-input .dropdown-item, product-select-input [role="option"]',
+			);
+
+			for (const option of options) {
+				const optionText = option.textContent.trim();
+				const matches = optionPatterns.some((pattern) =>
+					optionText.includes(pattern),
+				);
+
+				if (matches) {
+					console.log(`Selecting field option: ${optionText}`);
+					option.click();
+					return;
+				}
+			}
+
+			console.warn(`Could not find field option for Field ${fieldNumber}`);
+		}, 200);
+	}
+
 	// ===== STATE MANAGEMENT =====
 	const state = {
 		selectedSlot: null,
@@ -94,6 +145,7 @@
 		bookingTime: null,
 		selectedDate: null, // The date of the selected slot
 		canBookImmediately: false, // Whether booking can happen right now
+		selectedField: null, // The selected field number (1-3 for indoor, 1-5 for outdoor)
 	};
 
 	// ===== UI OVERLAY =====
@@ -245,6 +297,47 @@
 					font-style: italic;
 					grid-column: 1 / -1;
 				}
+				.sa-field-selector {
+					padding: 12px;
+					border-bottom: 1px solid #ddd;
+					background: #f8f9fa;
+					display: none;
+				}
+				.sa-field-selector.visible {
+					display: block;
+				}
+				.sa-field-label {
+					font-size: 12px;
+					font-weight: bold;
+					color: #333;
+					margin-bottom: 8px;
+				}
+				.sa-field-options {
+					display: flex;
+					gap: 8px;
+					flex-wrap: wrap;
+				}
+				.sa-field-option {
+					background: white;
+					border: 2px solid #ddd;
+					border-radius: 4px;
+					padding: 8px 12px;
+					font-size: 13px;
+					font-weight: bold;
+					cursor: pointer;
+					transition: all 0.2s;
+					min-width: 40px;
+					text-align: center;
+				}
+				.sa-field-option:hover {
+					border-color: #007bff;
+					background: #f0f8ff;
+				}
+				.sa-field-option.selected {
+					background: #007bff;
+					border-color: #007bff;
+					color: white;
+				}
 				.sa-footer {
 					padding: 12px;
 					border-top: 1px solid #ddd;
@@ -257,6 +350,10 @@
 			</div>
 			<div class="sa-status sa-status-idle" id="sa-status">
 				<span class="sa-status-text">Status: Waiting for selection...</span>
+			</div>
+			<div class="sa-field-selector" id="sa-field-selector">
+				<div class="sa-field-label">Select field:</div>
+				<div class="sa-field-options" id="sa-field-options"></div>
 			</div>
 			<div class="sa-slots" id="sa-slots">
 				<div class="sa-empty">No slots detected. Select a day to see available slots.</div>
@@ -394,12 +491,20 @@
 			return;
 		}
 
+		if (!state.selectedField) {
+			updateStatus('error', '❌ Please select a field first!');
+			return;
+		}
+
 		// Clear all timers
 		if (state.prepTimer) clearTimeout(state.prepTimer);
 		if (state.bookingTimer) clearTimeout(state.bookingTimer);
 		stopCountdown();
 
-		console.log('Manual booking triggered!');
+		console.log('Manual booking triggered!', {
+			slot: state.selectedSlot,
+			field: state.selectedField,
+		});
 
 		// Execute prep immediately
 		updateStatus('preparing', '🔄 Preparing booking...');
@@ -418,8 +523,8 @@
 				return;
 			}
 
-			// Focus the select input
-			modalDetails.selectInput.focus();
+			// Select the field in the dropdown
+			selectFieldInModal(modalDetails.selectInput, state.selectedField);
 
 			updateStatus('ready', '✅ Ready! Executing booking...');
 
@@ -443,7 +548,7 @@
 				setTimeout(() => {
 					updateStatus(
 						'success',
-						`🎉 Booking completed for ${state.selectedSlot.time}! Check if successful.`,
+						`🎉 Booking completed for ${state.selectedSlot.time} (Field ${state.selectedField})! Check if successful.`,
 					);
 				}, 500);
 			}, 1500); // Wait 1.5s between prep and booking
@@ -453,6 +558,7 @@
 	function resetState() {
 		// Clear selection
 		state.selectedSlot = null;
+		state.selectedField = null;
 		state.availableSlots = [];
 		state.hasFoundSlots = false;
 
@@ -578,8 +684,68 @@
 
 	function selectSlot(slot) {
 		state.selectedSlot = slot;
+		state.selectedField = null; // Reset field selection
 		renderSlots();
-		scheduleBooking();
+		renderFieldSelector();
+	}
+
+	function renderFieldSelector() {
+		const fieldSelector = document.getElementById('sa-field-selector');
+		const fieldOptions = document.getElementById('sa-field-options');
+
+		if (!fieldSelector || !fieldOptions) return;
+
+		if (!state.selectedSlot) {
+			// Hide field selector if no slot selected
+			fieldSelector.classList.remove('visible');
+			return;
+		}
+
+		// Determine field type from slot title
+		const isIndoor = state.selectedSlot.title.toLowerCase().includes('indoor');
+		const isOutdoor = state.selectedSlot.title
+			.toLowerCase()
+			.includes('outdoor');
+
+		if (!isIndoor && !isOutdoor) {
+			fieldSelector.classList.remove('visible');
+			return;
+		}
+
+		const fieldType = isIndoor ? 'indoor' : 'outdoor';
+		const fields = CONFIG.FIELD_OPTIONS[fieldType];
+
+		// Build field options HTML
+		fieldOptions.innerHTML = fields
+			.map(
+				(fieldNum) => `
+			<div class="sa-field-option ${state.selectedField === fieldNum ? 'selected' : ''}" data-field="${fieldNum}">
+				Field ${fieldNum}
+			</div>
+		`,
+			)
+			.join('');
+
+		// Add click handlers
+		fieldOptions.querySelectorAll('.sa-field-option').forEach((el) => {
+			el.addEventListener('click', () => {
+				const fieldNum = parseInt(el.dataset.field);
+				selectField(fieldNum);
+			});
+		});
+
+		// Show the field selector
+		fieldSelector.classList.add('visible');
+	}
+
+	function selectField(fieldNum) {
+		state.selectedField = fieldNum;
+		renderFieldSelector();
+
+		// If a slot is selected, update scheduling
+		if (state.selectedSlot) {
+			scheduleBooking();
+		}
 	}
 
 	// ===== SLOT DETECTION =====
@@ -838,6 +1004,11 @@
 			return;
 		}
 
+		if (!state.selectedField) {
+			updateStatus('error', '❌ Please select a field number!');
+			return;
+		}
+
 		updateStatus('preparing', '🔄 Preparing booking...');
 
 		// Click the reserve button to open the modal
@@ -855,8 +1026,8 @@
 				return;
 			}
 
-			// Focus the select input (this may trigger any necessary validation)
-			modalDetails.selectInput.focus();
+			// Select the field in the dropdown
+			selectFieldInModal(modalDetails.selectInput, state.selectedField);
 
 			// The countdown will automatically update to show booking countdown
 			state.status = 'ready';
