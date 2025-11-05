@@ -132,6 +132,34 @@
 					padding: 12px;
 					border-bottom: 1px solid #ddd;
 					font-size: 13px;
+					display: flex;
+					justify-content: space-between;
+					align-items: center;
+				}
+				.sa-status-text {
+					flex: 1;
+				}
+				.sa-book-now-btn {
+					background: #28a745;
+					color: white;
+					border: none;
+					border-radius: 4px;
+					padding: 6px 12px;
+					font-size: 12px;
+					font-weight: bold;
+					cursor: pointer;
+					transition: background 0.2s;
+				}
+				.sa-book-now-btn:hover {
+					background: #218838;
+				}
+				.sa-book-now-btn:active {
+					background: #1e7e34;
+				}
+				.sa-book-now-btn:disabled {
+					background: #6c757d;
+					cursor: not-allowed;
+					opacity: 0.6;
 				}
 				.sa-status-idle { background: #f0f0f0; }
 				.sa-status-preparing { background: #fff3cd; }
@@ -214,7 +242,7 @@
 				<span>🎯 Sportkot Automator</span>
 			</div>
 			<div class="sa-status sa-status-idle" id="sa-status">
-				Status: Waiting for selection...
+				<span class="sa-status-text">Status: Waiting for selection...</span>
 			</div>
 			<div class="sa-slots" id="sa-slots">
 				<div class="sa-empty">No slots detected. Select a day to see available slots.</div>
@@ -230,12 +258,31 @@
 		return overlay;
 	}
 
-	function updateStatus(status, message) {
+	function updateStatus(status, message, showBookNowButton = false) {
 		state.status = status;
 		const statusEl = document.getElementById('sa-status');
 		if (statusEl) {
 			statusEl.className = `sa-status sa-status-${status}`;
-			statusEl.textContent = message;
+
+			// Create status text element
+			const textSpan =
+				statusEl.querySelector('.sa-status-text') ||
+				document.createElement('span');
+			textSpan.className = 'sa-status-text';
+			textSpan.textContent = message;
+
+			// Clear and rebuild
+			statusEl.innerHTML = '';
+			statusEl.appendChild(textSpan);
+
+			// Add "Book Now" button if requested
+			if (showBookNowButton) {
+				const bookNowBtn = document.createElement('button');
+				bookNowBtn.className = 'sa-book-now-btn';
+				bookNowBtn.textContent = 'Book Now';
+				bookNowBtn.onclick = bookNowManual;
+				statusEl.appendChild(bookNowBtn);
+			}
 		}
 	}
 
@@ -266,6 +313,7 @@
 			updateStatus(
 				'idle',
 				`⏰ Preparing booking in ${formatTimeRemaining(remaining)}`,
+				true, // Show "Book Now" button
 			);
 		} else if (state.bookingTime && now < state.bookingTime) {
 			// Booking is upcoming (prep already happened or is happening)
@@ -274,9 +322,14 @@
 				updateStatus(
 					'ready',
 					`✅ Ready! Booking in ${formatTimeRemaining(remaining)}`,
+					true, // Show "Book Now" button
 				);
 			} else {
-				updateStatus('idle', `⏰ Booking in ${formatTimeRemaining(remaining)}`);
+				updateStatus(
+					'idle',
+					`⏰ Booking in ${formatTimeRemaining(remaining)}`,
+					true, // Show "Book Now" button
+				);
 			}
 		}
 	}
@@ -299,6 +352,68 @@
 			clearInterval(state.countdownInterval);
 			state.countdownInterval = null;
 		}
+	}
+
+	function bookNowManual() {
+		if (!state.selectedSlot) {
+			updateStatus('error', '❌ No slot selected!');
+			return;
+		}
+
+		// Clear all timers
+		if (state.prepTimer) clearTimeout(state.prepTimer);
+		if (state.bookingTimer) clearTimeout(state.bookingTimer);
+		stopCountdown();
+
+		console.log('Manual booking triggered!');
+
+		// Execute prep immediately
+		updateStatus('preparing', '🔄 Preparing booking...');
+
+		// Click the reserve button to open the modal
+		state.selectedSlot.button.click();
+
+		// Wait for modal to appear, then fill it out
+		setTimeout(() => {
+			const modalDetails = findProductModalDetail();
+			if (!modalDetails) {
+				updateStatus(
+					'error',
+					'❌ Could not prepare booking. Please check manually.',
+				);
+				return;
+			}
+
+			// Focus the select input
+			modalDetails.selectInput.focus();
+
+			updateStatus('ready', '✅ Ready! Executing booking...');
+
+			// Wait a moment, then execute booking
+			setTimeout(() => {
+				updateStatus('booking', '🚀 Booking NOW!');
+
+				const modalDetailsForBooking = findProductModalDetail();
+				if (!modalDetailsForBooking) {
+					updateStatus(
+						'error',
+						'❌ Could not complete booking. Please check manually!',
+					);
+					return;
+				}
+
+				// Click the booking button
+				modalDetailsForBooking.button.click();
+
+				// Give feedback
+				setTimeout(() => {
+					updateStatus(
+						'success',
+						`🎉 Booking completed for ${state.selectedSlot.time}! Check if successful.`,
+					);
+				}, 500);
+			}, 1500); // Wait 1.5s between prep and booking
+		}, 1000);
 	}
 
 	function resetState() {
@@ -611,11 +726,11 @@
 
 	function prepareBooking() {
 		if (!state.selectedSlot) {
-			updateStatus('error', 'No slot selected!');
+			updateStatus('error', '❌ No slot selected!');
 			return;
 		}
 
-		updateStatus('preparing', '🔄 Preparing reservation...');
+		updateStatus('preparing', '🔄 Preparing booking...');
 
 		// Click the reserve button to open the modal
 		state.selectedSlot.button.click();
@@ -627,7 +742,7 @@
 				stopCountdown();
 				updateStatus(
 					'error',
-					'❌ Could not find modal elements. Please check manually.',
+					'❌ Could not prepare booking. Please check manually.',
 				);
 				return;
 			}
@@ -648,13 +763,13 @@
 		}
 
 		stopCountdown();
-		updateStatus('booking', '🚀 Executing booking NOW!');
+		updateStatus('booking', '🚀 Booking NOW!');
 
 		const modalDetails = findProductModalDetail();
 		if (!modalDetails) {
 			updateStatus(
 				'error',
-				'❌ Could not find modal book button. Please complete manually!',
+				'❌ Could not complete booking. Please check manually!',
 			);
 			return;
 		}
@@ -666,7 +781,7 @@
 		setTimeout(() => {
 			updateStatus(
 				'success',
-				`🎉 Booking executed for ${state.selectedSlot.time}! Check if successful.`,
+				`🎉 Booking completed for ${state.selectedSlot.time}! Check if successful.`,
 			);
 		}, 500);
 	}
