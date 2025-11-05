@@ -145,7 +145,8 @@
 		bookingTime: null,
 		selectedDate: null, // The date of the selected slot
 		canBookImmediately: false, // Whether booking can happen right now
-		selectedField: null, // The selected field number (1-3 for indoor, 1-5 for outdoor)
+		selectedIndoorField: null, // The selected indoor field number (1-3)
+		selectedOutdoorField: null, // The selected outdoor field number (1-5)
 	};
 
 	// ===== UI OVERLAY =====
@@ -159,7 +160,7 @@
 					bottom: 20px;
 					right: 20px;
 					width: 500px;
-					max-height: 600px;
+					max-height: 700px;
 					background: white;
 					border: 2px solid #333;
 					border-radius: 8px;
@@ -182,9 +183,14 @@
 					align-items: center;
 					border-radius: 6px 6px 0 0;
 				}
+				.sa-header-times {
+					font-size: 10px;
+					font-weight: normal;
+					opacity: 0.7;
+				}
 				.sa-status {
 					padding: 12px;
-					border-bottom: 1px solid #ddd;
+					border-top: 1px solid #ddd;
 					font-size: 13px;
 					display: flex;
 					justify-content: space-between;
@@ -306,15 +312,25 @@
 				.sa-field-selector.visible {
 					display: block;
 				}
-				.sa-field-label {
-					font-size: 12px;
+				.sa-field-groups {
+					display: flex;
+					gap: 16px;
+				}
+				.sa-field-group {
+					flex: 1;
+				}
+				.sa-field-group-header {
+					font-size: 11px;
 					font-weight: bold;
-					color: #333;
+					color: #666;
+					text-transform: uppercase;
 					margin-bottom: 8px;
+					padding-bottom: 4px;
+					border-bottom: 2px solid #ddd;
 				}
 				.sa-field-options {
 					display: flex;
-					gap: 8px;
+					gap: 6px;
 					flex-wrap: wrap;
 				}
 				.sa-field-option {
@@ -326,7 +342,7 @@
 					font-weight: bold;
 					cursor: pointer;
 					transition: all 0.2s;
-					min-width: 40px;
+					min-width: 60px;
 					text-align: center;
 				}
 				.sa-field-option:hover {
@@ -338,29 +354,19 @@
 					border-color: #007bff;
 					color: white;
 				}
-				.sa-footer {
-					padding: 12px;
-					border-top: 1px solid #ddd;
-					font-size: 11px;
-					color: #666;
-				}
 			</style>
 			<div class="sa-header">
 				<span>🎯 Sportkot Automator</span>
-			</div>
-			<div class="sa-status sa-status-idle" id="sa-status">
-				<span class="sa-status-text">Status: Waiting for selection...</span>
+				<span class="sa-header-times">prepare: ${CONFIG.PREP_TIME.hour}:${String(CONFIG.PREP_TIME.minute).padStart(2, '0')} | book: ${CONFIG.BOOKING_TIME.hour}:${String(CONFIG.BOOKING_TIME.minute).padStart(2, '0')}</span>
 			</div>
 			<div class="sa-field-selector" id="sa-field-selector">
-				<div class="sa-field-label">Select field:</div>
-				<div class="sa-field-options" id="sa-field-options"></div>
+				<div class="sa-field-groups" id="sa-field-groups"></div>
 			</div>
 			<div class="sa-slots" id="sa-slots">
 				<div class="sa-empty">No slots detected. Select a day to see available slots.</div>
 			</div>
-			<div class="sa-footer">
-				Preparation: ${CONFIG.PREP_TIME.hour}:${String(CONFIG.PREP_TIME.minute).padStart(2, '0')} |
-				Booking: ${CONFIG.BOOKING_TIME.hour}:${String(CONFIG.BOOKING_TIME.minute).padStart(2, '0')}
+			<div class="sa-status sa-status-idle" id="sa-status">
+				<span class="sa-status-text">Status: Waiting for selection...</span>
 			</div>
 		`;
 
@@ -485,14 +491,31 @@
 		}
 	}
 
+	// Helper function to get the selected field for the current slot
+	function getSelectedFieldForSlot() {
+		if (!state.selectedSlot) return null;
+
+		const slotIsIndoor = state.selectedSlot.title
+			.toLowerCase()
+			.includes('indoor');
+
+		return slotIsIndoor
+			? state.selectedIndoorField
+			: state.selectedOutdoorField;
+	}
+
 	function bookNowManual() {
 		if (!state.selectedSlot) {
 			updateStatus('error', '❌ No slot selected!');
 			return;
 		}
 
-		if (!state.selectedField) {
-			updateStatus('error', '❌ Please select a field first!');
+		const selectedField = getSelectedFieldForSlot();
+		if (!selectedField) {
+			const slotType = state.selectedSlot.title.toLowerCase().includes('indoor')
+				? 'indoor'
+				: 'outdoor';
+			updateStatus('error', `❌ Please select an ${slotType} field first!`);
 			return;
 		}
 
@@ -503,7 +526,7 @@
 
 		console.log('Manual booking triggered!', {
 			slot: state.selectedSlot,
-			field: state.selectedField,
+			field: selectedField,
 		});
 
 		// Execute prep immediately
@@ -524,7 +547,7 @@
 			}
 
 			// Select the field in the dropdown
-			selectFieldInModal(modalDetails.selectInput, state.selectedField);
+			selectFieldInModal(modalDetails.selectInput, selectedField);
 
 			updateStatus('ready', '✅ Ready! Executing booking...');
 
@@ -548,7 +571,7 @@
 				setTimeout(() => {
 					updateStatus(
 						'success',
-						`🎉 Booking completed for ${state.selectedSlot.time} (Field ${state.selectedField})! Check if successful.`,
+						`🎉 Booking completed for ${state.selectedSlot.time} (Field ${selectedField})! Check if successful.`,
 					);
 				}, 500);
 			}, 1500); // Wait 1.5s between prep and booking
@@ -558,7 +581,8 @@
 	function resetState() {
 		// Clear selection
 		state.selectedSlot = null;
-		state.selectedField = null;
+		state.selectedIndoorField = null;
+		state.selectedOutdoorField = null;
 		state.availableSlots = [];
 		state.hasFoundSlots = false;
 
@@ -577,6 +601,7 @@
 
 		// Reset UI
 		renderSlots();
+		renderFieldSelector();
 		updateStatus('idle', 'Scanning for slots...');
 	}
 
@@ -684,53 +709,83 @@
 
 	function selectSlot(slot) {
 		state.selectedSlot = slot;
-		state.selectedField = null; // Reset field selection
 		renderSlots();
-		renderFieldSelector();
+		scheduleBooking();
 	}
 
 	function renderFieldSelector() {
 		const fieldSelector = document.getElementById('sa-field-selector');
-		const fieldOptions = document.getElementById('sa-field-options');
+		const fieldGroups = document.getElementById('sa-field-groups');
 
-		if (!fieldSelector || !fieldOptions) return;
+		if (!fieldSelector || !fieldGroups) return;
 
-		if (!state.selectedSlot) {
-			// Hide field selector if no slot selected
+		// Check what types of slots are available
+		const hasIndoor = state.availableSlots.some((slot) =>
+			slot.title.toLowerCase().includes('indoor'),
+		);
+		const hasOutdoor = state.availableSlots.some((slot) =>
+			slot.title.toLowerCase().includes('outdoor'),
+		);
+
+		if (!hasIndoor && !hasOutdoor) {
+			// No slots available, hide field selector
 			fieldSelector.classList.remove('visible');
 			return;
 		}
 
-		// Determine field type from slot title
-		const isIndoor = state.selectedSlot.title.toLowerCase().includes('indoor');
-		const isOutdoor = state.selectedSlot.title
-			.toLowerCase()
-			.includes('outdoor');
+		// Build the field selector UI with separate indoor/outdoor groups
+		let html = '';
 
-		if (!isIndoor && !isOutdoor) {
-			fieldSelector.classList.remove('visible');
-			return;
+		if (hasIndoor) {
+			html += `
+				<div class="sa-field-group">
+					<div class="sa-field-group-header">Indoor</div>
+					<div class="sa-field-options">
+						${CONFIG.FIELD_OPTIONS.indoor
+							.map(
+								(num) => `
+							<div class="sa-field-option ${state.selectedIndoorField === num ? 'selected' : ''}"
+								data-field="${num}"
+								data-field-type="indoor">
+								Field ${num}
+							</div>
+						`,
+							)
+							.join('')}
+					</div>
+				</div>
+			`;
 		}
 
-		const fieldType = isIndoor ? 'indoor' : 'outdoor';
-		const fields = CONFIG.FIELD_OPTIONS[fieldType];
+		if (hasOutdoor) {
+			html += `
+				<div class="sa-field-group">
+					<div class="sa-field-group-header">Outdoor</div>
+					<div class="sa-field-options">
+						${CONFIG.FIELD_OPTIONS.outdoor
+							.map(
+								(num) => `
+							<div class="sa-field-option ${state.selectedOutdoorField === num ? 'selected' : ''}"
+								data-field="${num}"
+								data-field-type="outdoor">
+								Field ${num}
+							</div>
+						`,
+							)
+							.join('')}
+					</div>
+				</div>
+			`;
+		}
 
-		// Build field options HTML
-		fieldOptions.innerHTML = fields
-			.map(
-				(fieldNum) => `
-			<div class="sa-field-option ${state.selectedField === fieldNum ? 'selected' : ''}" data-field="${fieldNum}">
-				Field ${fieldNum}
-			</div>
-		`,
-			)
-			.join('');
+		fieldGroups.innerHTML = html;
 
 		// Add click handlers
-		fieldOptions.querySelectorAll('.sa-field-option').forEach((el) => {
+		fieldGroups.querySelectorAll('.sa-field-option').forEach((el) => {
 			el.addEventListener('click', () => {
 				const fieldNum = parseInt(el.dataset.field);
-				selectField(fieldNum);
+				const fieldType = el.dataset.fieldType;
+				selectField(fieldNum, fieldType);
 			});
 		});
 
@@ -738,8 +793,12 @@
 		fieldSelector.classList.add('visible');
 	}
 
-	function selectField(fieldNum) {
-		state.selectedField = fieldNum;
+	function selectField(fieldNum, fieldType) {
+		if (fieldType === 'indoor') {
+			state.selectedIndoorField = fieldNum;
+		} else {
+			state.selectedOutdoorField = fieldNum;
+		}
 		renderFieldSelector();
 
 		// If a slot is selected, update scheduling
@@ -764,6 +823,7 @@
 
 		state.availableSlots = slots;
 		renderSlots();
+		renderFieldSelector(); // Render field selector when slots are found
 
 		if (slots.length > 0) {
 			// Found slots! Stop the interval scanning
@@ -1004,8 +1064,12 @@
 			return;
 		}
 
-		if (!state.selectedField) {
-			updateStatus('error', '❌ Please select a field number!');
+		const selectedField = getSelectedFieldForSlot();
+		if (!selectedField) {
+			const slotType = state.selectedSlot.title.toLowerCase().includes('indoor')
+				? 'indoor'
+				: 'outdoor';
+			updateStatus('error', `❌ Please select an ${slotType} field first!`);
 			return;
 		}
 
@@ -1027,7 +1091,7 @@
 			}
 
 			// Select the field in the dropdown
-			selectFieldInModal(modalDetails.selectInput, state.selectedField);
+			selectFieldInModal(modalDetails.selectInput, selectedField);
 
 			// The countdown will automatically update to show booking countdown
 			state.status = 'ready';
