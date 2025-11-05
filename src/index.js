@@ -31,6 +31,7 @@
 			slotTime: '[data-test-id="bookable-slot-start-time"]',
 			slotTitle: '[data-test-id="bookable-slot-linked-product-description"]',
 			slotButton: '.btn',
+			modalContainer: 'modal-container .modal-content',
 			modalProductSelect: 'product-select-input input',
 			modalBookButton: '.btn[data-test-id=details-book-button]',
 		},
@@ -87,48 +88,144 @@
 
 	/**
 	 * Select a field in the modal dropdown
-	 * @param {HTMLInputElement} selectInput
 	 * @param {number} fieldNumber
+	 * @returns {Promise<boolean>} True if selection succeeded, false otherwise
 	 */
-	function selectFieldInModal(selectInput, fieldNumber) {
-		// Determine field type from selected slot
-		const isIndoor = state.selectedSlot.title.toLowerCase().includes('indoor');
-		const fieldType = isIndoor ? 'Indoor' : 'Outdoor';
-
-		// Try to find and select the option that matches
-		// The options typically follow a pattern like "Beachvolley 1", "B&FH Indoor Beachvolley 1", etc.
-		const optionPatterns = [
-			`Beachvolley ${fieldNumber}`,
-			`${fieldType} Beachvolley ${fieldNumber}`,
-			`B&FH ${fieldType} Beachvolley ${fieldNumber}`,
-		];
-
-		// Focus and click the input to open dropdown
-		selectInput.focus();
-		selectInput.click();
-
-		// Wait a moment for dropdown to populate, then select option
-		setTimeout(() => {
-			// Try to find matching option in the dropdown
-			const options = document.querySelectorAll(
-				'product-select-input .dropdown-item, product-select-input [role="option"]',
+	function selectFieldInModal(fieldNumber) {
+		return new Promise((resolve) => {
+			console.log(
+				`[Field Selection] Starting selection for field ${fieldNumber}`,
 			);
 
-			for (const option of options) {
-				const optionText = option.textContent.trim();
-				const matches = optionPatterns.some((pattern) =>
-					optionText.includes(pattern),
-				);
+			// Find the modal using the configured selector
+			const modal = document.querySelector(CONFIG.SELECTORS.modalContainer);
 
-				if (matches) {
-					console.log(`Selecting field option: ${optionText}`);
-					option.click();
-					return;
-				}
+			if (!modal) {
+				console.error('[Field Selection] Could not find modal');
+				console.log(
+					'[Field Selection] Tried selector:',
+					CONFIG.SELECTORS.modalContainer,
+				);
+				resolve(false);
+				return;
 			}
 
-			console.warn(`Could not find field option for Field ${fieldNumber}`);
-		}, 200);
+			console.log('[Field Selection] Found modal');
+
+			const ngSelect = modal.querySelector('ng-select');
+			if (!ngSelect) {
+				console.error('[Field Selection] Could not find ng-select in modal');
+				resolve(false);
+				return;
+			}
+
+			// Find and click the ng-select container to open dropdown
+			const ngSelectContainer = ngSelect.querySelector('.ng-select-container');
+			if (!ngSelectContainer) {
+				console.error('[Field Selection] Could not find ng-select-container');
+				resolve(false);
+				return;
+			}
+
+			console.log('[Field Selection] Opening dropdown...');
+
+			// Try multiple methods to open the Angular dropdown
+			// Method 1: Native click event
+			const clickEvent = new MouseEvent('click', {
+				bubbles: true,
+				cancelable: true,
+				view: window,
+			});
+			ngSelectContainer.dispatchEvent(clickEvent);
+
+			// Method 2: Also try clicking on the arrow/icon if it exists
+			const arrowIcon = ngSelect.querySelector('.ng-arrow-wrapper');
+			if (arrowIcon) {
+				arrowIcon.click();
+				arrowIcon.dispatchEvent(clickEvent);
+			}
+
+			// Method 3: Try mousedown event which ng-select sometimes uses
+			const mousedownEvent = new MouseEvent('mousedown', {
+				bubbles: true,
+				cancelable: true,
+				view: window,
+			});
+			ngSelectContainer.dispatchEvent(mousedownEvent);
+
+			// Wait for dropdown to open and populate
+			setTimeout(() => {
+				// Look for options in the dropdown panel
+				// ng-dropdown-panel might be outside the ng-select element
+				let dropdownPanel = ngSelect.querySelector('ng-dropdown-panel');
+				if (!dropdownPanel) {
+					// Try searching in the entire document
+					dropdownPanel = document.querySelector('ng-dropdown-panel');
+				}
+
+				if (!dropdownPanel) {
+					console.error('[Field Selection] Dropdown panel not found');
+					console.log('[Field Selection] Trying to check ng-select state...');
+					console.log(
+						'[Field Selection] ng-select classes:',
+						ngSelect.className,
+					);
+					console.log(
+						'[Field Selection] Is dropdown open?',
+						ngSelect.classList.contains('ng-select-opened'),
+					);
+					resolve(false);
+					return;
+				}
+
+				const options = dropdownPanel.querySelectorAll('.ng-option');
+				console.log(
+					`[Field Selection] Found ${options.length} dropdown options`,
+				);
+
+				if (options.length === 0) {
+					console.warn('[Field Selection] No options found in dropdown');
+					resolve(false);
+					return;
+				}
+
+				// Match any text that contains the field number as a word
+				// Pattern matches "Beachvolley 5", "Indoor Beachvolley 3", etc.
+				const fieldPattern = new RegExp(`\\b${fieldNumber}\\b`);
+
+				for (const option of options) {
+					const optionText = option.textContent.trim();
+
+					if (fieldPattern.test(optionText)) {
+						console.log(`[Field Selection] ✓ Matched option: "${optionText}"`);
+
+						// Click the option
+						option.click();
+
+						// Also dispatch mouse event for Angular
+						const clickEvent = new MouseEvent('click', {
+							bubbles: true,
+							cancelable: true,
+							view: window,
+						});
+						option.dispatchEvent(clickEvent);
+
+						console.log('[Field Selection] Selection completed');
+						resolve(true);
+						return;
+					}
+				}
+
+				console.warn(
+					`[Field Selection] Could not find option with field number ${fieldNumber}`,
+				);
+				console.log(
+					'[Field Selection] Available options:',
+					Array.from(options).map((o) => o.textContent.trim()),
+				);
+				resolve(false);
+			}, 400); // Give Angular time to render dropdown
+		});
 	}
 
 	// ===== STATE MANAGEMENT =====
@@ -160,7 +257,7 @@
 					bottom: 20px;
 					right: 20px;
 					width: 500px;
-					max-height: 700px;
+					max-height: min(700px, 95dvh);
 					background: white;
 					border: 2px solid #333;
 					border-radius: 8px;
@@ -254,7 +351,7 @@
 					grid-template-columns: 1fr 1fr;
 				}
 				.sa-slot {
-					border: 1px solid #ddd;
+					border: 2px solid #ddd;
 					border-radius: 4px;
 					padding: 10px;
 					cursor: pointer;
@@ -267,7 +364,6 @@
 				.sa-slot.selected {
 					background: #e7f3ff;
 					border-color: #007bff;
-					border-width: 2px;
 				}
 				.sa-slot-time {
 					font-weight: bold;
@@ -290,7 +386,7 @@
 					grid-column: 1 / -1;
 				}
 				.sa-slot-empty {
-					border: 1px dashed #ddd;
+					border: 2px dashed #ddd;
 					border-radius: 4px;
 					padding: 10px;
 					background: #fafafa;
@@ -536,7 +632,7 @@
 		state.selectedSlot.button.click();
 
 		// Wait for modal to appear, then fill it out
-		setTimeout(() => {
+		setTimeout(async () => {
 			const modalDetails = findProductModalDetail();
 			if (!modalDetails) {
 				updateStatus(
@@ -547,7 +643,15 @@
 			}
 
 			// Select the field in the dropdown
-			selectFieldInModal(modalDetails.selectInput, selectedField);
+			const fieldSelected = await selectFieldInModal(selectedField);
+
+			if (!fieldSelected) {
+				updateStatus(
+					'error',
+					'❌ Could not select field in dropdown. Please check manually.',
+				);
+				return;
+			}
 
 			updateStatus('ready', '✅ Ready! Executing booking...');
 
@@ -581,8 +685,7 @@
 	function resetState() {
 		// Clear selection
 		state.selectedSlot = null;
-		state.selectedIndoorField = null;
-		state.selectedOutdoorField = null;
+		// Keep field selections - they're valid across all days
 		state.availableSlots = [];
 		state.hasFoundSlots = false;
 
@@ -960,6 +1063,7 @@
 		console.warn('Could not determine selected date, defaulting to today');
 		return new Date();
 	}
+
 	function canBookImmediately() {
 		const now = new Date();
 		const selectedDate = getSelectedDate();
@@ -1007,6 +1111,16 @@
 	function scheduleBooking() {
 		if (!state.selectedSlot) {
 			console.log('No slot selected, cannot schedule');
+			return;
+		}
+
+		// Check if a matching field is selected
+		const selectedField = getSelectedFieldForSlot();
+		if (!selectedField) {
+			const slotType = state.selectedSlot.title.toLowerCase().includes('indoor')
+				? 'indoor'
+				: 'outdoor';
+			updateStatus('idle', `⚠️ Please select an ${slotType} field`);
 			return;
 		}
 
@@ -1079,7 +1193,7 @@
 		state.selectedSlot.button.click();
 
 		// Wait for modal to appear, then fill it out
-		setTimeout(() => {
+		setTimeout(async () => {
 			const modalDetails = findProductModalDetail();
 			if (!modalDetails) {
 				stopCountdown();
@@ -1091,7 +1205,16 @@
 			}
 
 			// Select the field in the dropdown
-			selectFieldInModal(modalDetails.selectInput, selectedField);
+			const fieldSelected = await selectFieldInModal(selectedField);
+
+			if (!fieldSelected) {
+				stopCountdown();
+				updateStatus(
+					'error',
+					'❌ Could not select field in dropdown. Please check manually.',
+				);
+				return;
+			}
 
 			// The countdown will automatically update to show booking countdown
 			state.status = 'ready';
