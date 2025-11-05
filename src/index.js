@@ -87,6 +87,8 @@
 		status: 'idle', // 'idle', 'preparing', 'ready', 'booking', 'success', 'error'
 		prepTimer: null,
 		bookingTimer: null,
+		scanInterval: null,
+		hasFoundSlots: false,
 	};
 
 	// ===== UI OVERLAY =====
@@ -122,16 +124,6 @@
 					justify-content: space-between;
 					align-items: center;
 					border-radius: 6px 6px 0 0;
-				}
-				.sa-close {
-					background: none;
-					border: none;
-					color: white;
-					font-size: 20px;
-					cursor: pointer;
-					padding: 0;
-					width: 24px;
-					height: 24px;
 				}
 				.sa-status {
 					padding: 12px;
@@ -191,7 +183,6 @@
 			</style>
 			<div class="sa-header">
 				<span>🎯 Sportkot Automator</span>
-				<button class="sa-close" title="Close">×</button>
 			</div>
 			<div class="sa-status sa-status-idle" id="sa-status">
 				Status: Waiting for selection...
@@ -206,11 +197,6 @@
 		`;
 
 		document.body.appendChild(overlay);
-
-		// Close button handler
-		overlay.querySelector('.sa-close').addEventListener('click', () => {
-			overlay.style.display = 'none';
-		});
 
 		return overlay;
 	}
@@ -279,18 +265,39 @@
 		renderSlots();
 
 		if (slots.length > 0) {
+			// Found slots! Stop the interval scanning
+			if (state.scanInterval) {
+				clearInterval(state.scanInterval);
+				state.scanInterval = null;
+			}
+			state.hasFoundSlots = true;
+
 			updateStatus(
 				'idle',
 				`Found ${slots.length} available slot${slots.length > 1 ? 's' : ''}. Select one to begin.`,
 			);
 		} else {
-			updateStatus('idle', 'No slots found. Try selecting a different day.');
+			// Only update status if we haven't found slots yet
+			if (!state.hasFoundSlots) {
+				updateStatus('idle', 'Scanning for slots...');
+			}
 		}
 	}
 
 	function setupSlotMonitoring() {
-		// Initial scan
-		setTimeout(scanForSlots, 1000);
+		// Start periodic scanning until we find slots
+		updateStatus('idle', 'Scanning for slots...');
+
+		// Initial immediate scan
+		scanForSlots();
+
+		// Keep scanning every 2 seconds until we find slots
+		state.scanInterval = setInterval(() => {
+			if (!state.hasFoundSlots) {
+				console.log('Periodic scan for slots...');
+				scanForSlots();
+			}
+		}, 2000);
 
 		// Monitor for changes to the slot list
 		const slotListContainer = document.querySelector(
@@ -300,7 +307,18 @@
 		if (slotListContainer) {
 			const observer = new MutationObserver(() => {
 				console.log('Slot list changed, rescanning...');
+				// Reset the found flag when content changes
+				state.hasFoundSlots = false;
 				scanForSlots();
+
+				// Restart interval scanning if needed
+				if (!state.scanInterval && !state.hasFoundSlots) {
+					state.scanInterval = setInterval(() => {
+						if (!state.hasFoundSlots) {
+							scanForSlots();
+						}
+					}, 2000);
+				}
 			});
 
 			observer.observe(slotListContainer, {
@@ -316,7 +334,30 @@
 
 		daySelectorButtons.forEach((button) => {
 			button.addEventListener('click', () => {
-				console.log('Day selector clicked, rescanning in 500ms...');
+				console.log(
+					'Day selector clicked, clearing selection and rescanning...',
+				);
+				// Clear selection and reset state
+				state.selectedSlot = null;
+				state.hasFoundSlots = false;
+				state.availableSlots = [];
+				renderSlots();
+
+				// Clear any scheduled bookings
+				if (state.prepTimer) clearTimeout(state.prepTimer);
+				if (state.bookingTimer) clearTimeout(state.bookingTimer);
+
+				updateStatus('idle', 'Scanning for slots...');
+
+				// Start scanning again
+				if (!state.scanInterval) {
+					state.scanInterval = setInterval(() => {
+						if (!state.hasFoundSlots) {
+							scanForSlots();
+						}
+					}, 2000);
+				}
+
 				setTimeout(scanForSlots, 500);
 			});
 		});
