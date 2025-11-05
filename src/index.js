@@ -12,45 +12,59 @@
 (function () {
 	'use strict';
 
-	const daySelectorButtonElements = document.querySelectorAll(
-		'day-selector .btn[data-test-id-day-selector]',
-	);
+	// const daySelectorButtonElements = document.querySelectorAll(
+	// 	'day-selector .btn[data-test-id-day-selector]',
+	// );
 	const bookableSlotElements = document.querySelectorAll(
 		'bookable-slot-list div[data-test-id="bookable-slot-list"]',
 	);
 
 	/**
-	 * @param {HTMLElement} bookableSlotElement
-	 * @return {string | undefined} time in format "HH:MM"
+	 * @typedef {object} BookableSlotDetails
+	 * @property {HTMLButtonElement} button
+	 * @property {string} time
+	 * @property {string} title
 	 */
-	function findBookableSlotTime(bookableSlotElement) {
-		return bookableSlotElement
+
+	/**
+	 * @typedef {object} BookableSlotModalDetails
+	 * @property {HTMLButtonElement} button
+	 * @property {HTMLInputElement} selectInput
+	 */
+
+	/**
+	 * @param {HTMLElement} bookableSlotElement
+	 * @return {BookableSlotDetails | undefined}
+	 */
+	function findBookableSlotDetails(bookableSlotElement) {
+		const button = bookableSlotElement.querySelector('.btn');
+		const time = bookableSlotElement
 			.querySelector('[data-test-id="bookable-slot-start-time"]')
 			?.textContent.trim();
-	}
-
-	/**
-	 * @param {HTMLElement} bookableSlotElement
-	 */
-	function findBookableSlotReservationButtonElement(bookableSlotElement) {
-		return bookableSlotElement.querySelector('.btn');
-	}
-
-	function findModalContentElement() {
-		return document.querySelector('modal-container .modal-content');
-	}
-
-	/**
-	 * @param {HTMLElement} root
-	 */
-	function findProductSelectInputElement(root) {
-		return root.querySelector('product-select-input input');
+		const title = bookableSlotElement
+			.querySelector(
+				'[data-test-id="bookable-slot-linked-product-description"]',
+			)
+			?.textContent.trim();
+		if (!button || !time || !title) {
+			console.log('Missing element:', { button, time, title });
+			return;
+		}
+		return { button, time, title };
 	}
 
 	/**
 	 * @param {HTMLElement} root
 	 */
-	function findProductBookButtonElement(root) {
-		return root.querySelector('.btn[data-test-id=details-book-button]');
+	function findProductModalDetail() {
+		const selectInput = document.querySelector('product-select-input input');
+		const button = document.querySelector(
+			'.btn[data-test-id=details-book-button]',
+		);
+		if (!selectInput || !button) {
+			console.log('Missing elements:', { selectInput, button });
+			return;
+		}
+		return { selectInput, button };
 	}
 })();
