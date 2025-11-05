@@ -1108,6 +1108,14 @@
 
 		const selectedField = getSelectedFieldForSlot();
 		if (!selectedField) {
+			if (state.prepTimer) clearTimeout(state.prepTimer);
+			if (state.bookingTimer) clearTimeout(state.bookingTimer);
+			stopCountdown();
+			stopTimeChecking();
+
+			state.prepTime = null;
+			state.bookingTime = null;
+
 			const slotType = state.selectedSlot.title.toLowerCase().includes('indoor')
 				? 'indoor'
 				: 'outdoor';
