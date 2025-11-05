@@ -232,6 +232,7 @@
 				.sa-status {
 					padding: 12px;
 					border-top: 1px solid #ddd;
+					border-radius: 0 0 6px 6px;
 					font-size: 13px;
 					display: flex;
 					justify-content: space-between;
