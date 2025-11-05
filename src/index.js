@@ -4,7 +4,7 @@
 // @version      2025-11-05
 // @description  Automates booking on Sportkot Bookable Timeslots
 // @author       Dieter Luypaert
-// @match        https://*/*
+// @match        https://usc.kuleuven.cloud/products/bookable-product-schedule*
 // @icon         data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==
 // @grant        none
 // ==/UserScript==
