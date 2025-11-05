@@ -89,6 +89,9 @@
 		bookingTimer: null,
 		scanInterval: null,
 		hasFoundSlots: false,
+		countdownInterval: null,
+		prepTime: null,
+		bookingTime: null,
 	};
 
 	// ===== UI OVERLAY =====
@@ -210,6 +213,68 @@
 		}
 	}
 
+	function formatTimeRemaining(milliseconds) {
+		const totalSeconds = Math.floor(milliseconds / 1000);
+		const hours = Math.floor(totalSeconds / 3600);
+		const minutes = Math.floor((totalSeconds % 3600) / 60);
+		const seconds = totalSeconds % 60;
+
+		if (hours > 0) {
+			return `${hours}h ${minutes}m ${seconds}s`;
+		} else if (minutes > 0) {
+			return `${minutes}m ${seconds}s`;
+		} else {
+			return `${seconds}s`;
+		}
+	}
+
+	function updateCountdown() {
+		if (!state.selectedSlot) return;
+
+		const now = Date.now();
+
+		// Determine which action is next
+		if (state.prepTime && now < state.prepTime) {
+			// Prep is upcoming
+			const remaining = state.prepTime - now;
+			updateStatus(
+				'idle',
+				`⏰ Preparing modal in ${formatTimeRemaining(remaining)}`,
+			);
+		} else if (state.bookingTime && now < state.bookingTime) {
+			// Booking is upcoming (prep already happened or is happening)
+			const remaining = state.bookingTime - now;
+			if (state.status === 'ready') {
+				updateStatus(
+					'ready',
+					`✅ Ready! Booking in ${formatTimeRemaining(remaining)}`,
+				);
+			} else {
+				updateStatus('idle', `⏰ Booking in ${formatTimeRemaining(remaining)}`);
+			}
+		}
+	}
+
+	function startCountdown() {
+		// Clear any existing countdown
+		if (state.countdownInterval) {
+			clearInterval(state.countdownInterval);
+		}
+
+		// Update immediately
+		updateCountdown();
+
+		// Update every second
+		state.countdownInterval = setInterval(updateCountdown, 1000);
+	}
+
+	function stopCountdown() {
+		if (state.countdownInterval) {
+			clearInterval(state.countdownInterval);
+			state.countdownInterval = null;
+		}
+	}
+
 	function renderSlots() {
 		const slotsContainer = document.getElementById('sa-slots');
 		if (!slotsContainer) return;
@@ -243,7 +308,6 @@
 	function selectSlot(slot) {
 		state.selectedSlot = slot;
 		renderSlots();
-		updateStatus('idle', `Selected: ${slot.time} - ${slot.title}`);
 		scheduleBooking();
 	}
 
@@ -346,6 +410,7 @@
 				// Clear any scheduled bookings
 				if (state.prepTimer) clearTimeout(state.prepTimer);
 				if (state.bookingTimer) clearTimeout(state.bookingTimer);
+				stopCountdown();
 
 				updateStatus('idle', 'Scanning for slots...');
 
@@ -386,6 +451,7 @@
 		// Clear any existing timers
 		if (state.prepTimer) clearTimeout(state.prepTimer);
 		if (state.bookingTimer) clearTimeout(state.bookingTimer);
+		stopCountdown();
 
 		const prepDelay = getTimeUntil(
 			CONFIG.PREP_TIME.hour,
@@ -396,13 +462,9 @@
 			CONFIG.BOOKING_TIME.minute,
 		);
 
-		const prepDate = new Date(Date.now() + prepDelay);
-		const bookingDate = new Date(Date.now() + bookingDelay);
-
-		updateStatus(
-			'idle',
-			`Scheduled: Prep at ${prepDate.toLocaleTimeString()}, Book at ${bookingDate.toLocaleTimeString()}`,
-		);
+		// Store the exact times
+		state.prepTime = Date.now() + prepDelay;
+		state.bookingTime = Date.now() + bookingDelay;
 
 		// Schedule preparation
 		state.prepTimer = setTimeout(() => {
@@ -413,6 +475,9 @@
 		state.bookingTimer = setTimeout(() => {
 			executeBooking();
 		}, bookingDelay);
+
+		// Start the countdown display
+		startCountdown();
 
 		console.log(
 			`Booking scheduled - Prep in ${Math.round(prepDelay / 1000)}s, Book in ${Math.round(bookingDelay / 1000)}s`,
@@ -425,7 +490,7 @@
 			return;
 		}
 
-		updateStatus('preparing', 'Opening modal and preparing booking...');
+		updateStatus('preparing', '🔄 Opening modal and preparing booking...');
 
 		// Click the reserve button to open the modal
 		state.selectedSlot.button.click();
@@ -434,9 +499,10 @@
 		setTimeout(() => {
 			const modalDetails = findProductModalDetail();
 			if (!modalDetails) {
+				stopCountdown();
 				updateStatus(
 					'error',
-					'Could not find modal elements. Please check manually.',
+					'❌ Could not find modal elements. Please check manually.',
 				);
 				return;
 			}
@@ -444,26 +510,26 @@
 			// Focus the select input (this may trigger any necessary validation)
 			modalDetails.selectInput.focus();
 
-			updateStatus(
-				'ready',
-				`Ready to book ${state.selectedSlot.time}. Waiting for ${CONFIG.BOOKING_TIME.hour}:${String(CONFIG.BOOKING_TIME.minute).padStart(2, '0')}...`,
-			);
+			// The countdown will automatically update to show booking countdown
+			state.status = 'ready';
+			updateCountdown();
 		}, 1000);
 	}
 
 	function executeBooking() {
 		if (!state.selectedSlot) {
-			updateStatus('error', 'No slot selected!');
+			updateStatus('error', '❌ No slot selected!');
 			return;
 		}
 
-		updateStatus('booking', 'Executing booking NOW!');
+		stopCountdown();
+		updateStatus('booking', '🚀 Executing booking NOW!');
 
 		const modalDetails = findProductModalDetail();
 		if (!modalDetails) {
 			updateStatus(
 				'error',
-				'Could not find modal book button. Please complete manually!',
+				'❌ Could not find modal book button. Please complete manually!',
 			);
 			return;
 		}
@@ -475,7 +541,7 @@
 		setTimeout(() => {
 			updateStatus(
 				'success',
-				`Booking executed for ${state.selectedSlot.time}! Check if successful.`,
+				`🎉 Booking executed for ${state.selectedSlot.time}! Check if successful.`,
 			);
 		}, 500);
 	}
