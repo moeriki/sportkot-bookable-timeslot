@@ -12,18 +12,13 @@
 (function () {
 	'use strict';
 
-	// ===== CONFIGURATION =====
 	const CONFIG = {
-		// Time when the system becomes semi-active (can prepare booking)
 		PREP_TIME: { hour: 8, minute: 59 },
-		// Time when actual booking can be executed
 		BOOKING_TIME: { hour: 9, minute: 0 },
-		// Field options by type
 		FIELD_OPTIONS: {
 			indoor: [1, 2, 3],
 			outdoor: [1, 2, 3, 4, 5],
 		},
-		// Selectors for page elements
 		SELECTORS: {
 			daySelectorButtons: 'day-selector .btn[data-test-id-day-selector]',
 			bookableSlotList: 'bookable-slot-list',
@@ -37,59 +32,27 @@
 		},
 	};
 
-	/**
-	 * @typedef {object} BookableSlotDetails
-	 * @property {HTMLButtonElement} button
-	 * @property {string} time
-	 * @property {string} title
-	 */
+	const state = {
+		selectedSlot: null,
+		availableSlots: [],
+		status: 'idle',
+		prepTimer: null,
+		bookingTimer: null,
+		scanInterval: null,
+		hasFoundSlots: false,
+		countdownInterval: null,
+		prepTime: null,
+		bookingTime: null,
+		selectedDate: null,
+		canBookImmediately: false,
+		selectedIndoorField: null,
+		selectedOutdoorField: null,
+		timeCheckInterval: null,
+	};
 
 	/**
-	 * @typedef {object} BookableSlotModalDetails
-	 * @property {HTMLButtonElement} button
-	 * @property {HTMLInputElement} selectInput
-	 */
-
-	/**
-	 * @param {HTMLElement} bookableSlotElement
-	 * @return {BookableSlotDetails | undefined}
-	 */
-	function findBookableSlotDetails(bookableSlotElement) {
-		const button = bookableSlotElement.querySelector(
-			CONFIG.SELECTORS.slotButton,
-		);
-		const time = bookableSlotElement
-			.querySelector(CONFIG.SELECTORS.slotTime)
-			?.textContent.trim();
-		const title = bookableSlotElement
-			.querySelector(CONFIG.SELECTORS.slotTitle)
-			?.textContent.trim();
-		if (!button || !time || !title) {
-			console.log('Missing element:', { button, time, title });
-			return;
-		}
-		return { button, time, title };
-	}
-
-	/**
-	 * @param {HTMLElement} root
-	 */
-	function findProductModalDetail() {
-		const selectInput = document.querySelector(
-			CONFIG.SELECTORS.modalProductSelect,
-		);
-		const button = document.querySelector(CONFIG.SELECTORS.modalBookButton);
-		if (!selectInput || !button) {
-			console.log('Missing elements:', { selectInput, button });
-			return;
-		}
-		return { selectInput, button };
-	}
-
-	/**
-	 * Select a field in the modal dropdown
 	 * @param {number} fieldNumber
-	 * @returns {Promise<boolean>} True if selection succeeded, false otherwise
+	 * @returns {Promise<boolean>}
 	 */
 	function selectFieldInModal(fieldNumber) {
 		return new Promise((resolve) => {
@@ -224,30 +187,10 @@
 					Array.from(options).map((o) => o.textContent.trim()),
 				);
 				resolve(false);
-			}, 400); // Give Angular time to render dropdown
+			}, 400);
 		});
 	}
 
-	// ===== STATE MANAGEMENT =====
-	const state = {
-		selectedSlot: null,
-		availableSlots: [],
-		status: 'idle', // 'idle', 'preparing', 'ready', 'booking', 'success', 'error'
-		prepTimer: null,
-		bookingTimer: null,
-		scanInterval: null,
-		hasFoundSlots: false,
-		countdownInterval: null,
-		prepTime: null,
-		bookingTime: null,
-		selectedDate: null, // The date of the selected slot
-		canBookImmediately: false, // Whether booking can happen right now
-		selectedIndoorField: null, // The selected indoor field number (1-3)
-		selectedOutdoorField: null, // The selected outdoor field number (1-5)
-		timeCheckInterval: null, // Interval to check if booking time has passed
-	};
-
-	// ===== UI OVERLAY =====
 	function createOverlay() {
 		const overlay = document.createElement('div');
 		overlay.id = 'sportkot-automator-overlay';
@@ -472,6 +415,11 @@
 		return overlay;
 	}
 
+	/**
+	 * @param {string} status
+	 * @param {string} message
+	 * @param {boolean|string} [showBookNowButton=false]
+	 */
 	function updateStatus(status, message, showBookNowButton = false) {
 		state.status = status;
 		const statusEl = document.getElementById('sa-status');
@@ -503,14 +451,16 @@
 		}
 	}
 
+	/**
+	 * @param {number} milliseconds
+	 * @returns {string}
+	 */
 	function formatTimeRemaining(milliseconds) {
 		const totalSeconds = Math.floor(milliseconds / 1000);
 		const hours = Math.floor(totalSeconds / 3600);
 		const minutes = Math.floor((totalSeconds % 3600) / 60);
 		const seconds = totalSeconds % 60;
-
-		// Only show seconds if under 5 minutes
-		const showSeconds = totalSeconds < 300; // 5 minutes = 300 seconds
+		const showSeconds = totalSeconds < 300;
 
 		if (hours > 0) {
 			if (showSeconds && hours === 0) {
@@ -529,13 +479,11 @@
 
 	function updateCountdown() {
 		if (!state.selectedSlot) return;
-		if (state.canBookImmediately) return; // Don't show countdown for immediate booking
+		if (state.canBookImmediately) return;
 
 		const now = Date.now();
 
-		// Determine which action is next
 		if (state.prepTime && now < state.prepTime) {
-			// Prep is upcoming
 			const remaining = state.prepTime - now;
 			const prepDate = new Date(state.prepTime);
 			const dateStr = prepDate.toLocaleDateString('en-US', {
@@ -547,22 +495,21 @@
 			updateStatus(
 				'idle',
 				`⏰ Preparing booking in ${formatTimeRemaining(remaining)} (at ${dateStr})`,
-				'secondary', // Show "Book Now" button as secondary action
+				'secondary',
 			);
 		} else if (state.bookingTime && now < state.bookingTime) {
-			// Booking is upcoming (prep already happened or is happening)
 			const remaining = state.bookingTime - now;
 			if (state.status === 'ready') {
 				updateStatus(
 					'ready',
 					`✅ Ready! Booking in ${formatTimeRemaining(remaining)}`,
-					'secondary', // Show "Book Now" button as secondary action
+					'secondary',
 				);
 			} else {
 				updateStatus(
 					'idle',
 					`⏰ Booking in ${formatTimeRemaining(remaining)}`,
-					'secondary', // Show "Book Now" button as secondary action
+					'secondary',
 				);
 			}
 		}
@@ -588,7 +535,9 @@
 		}
 	}
 
-	// Helper function to get the selected field for the current slot
+	/**
+	 * @returns {number|null}
+	 */
 	function getSelectedFieldForSlot() {
 		if (!state.selectedSlot) return null;
 
@@ -616,7 +565,6 @@
 			return;
 		}
 
-		// Clear all timers
 		if (state.prepTimer) clearTimeout(state.prepTimer);
 		if (state.bookingTimer) clearTimeout(state.bookingTimer);
 		stopCountdown();
@@ -626,10 +574,8 @@
 			field: selectedField,
 		});
 
-		// Execute prep immediately
 		updateStatus('preparing', '🔄 Preparing booking...');
 
-		// Click the reserve button to open the modal
 		state.selectedSlot.button.click();
 
 		// Wait for modal to appear, then fill it out
@@ -684,13 +630,10 @@
 	}
 
 	function resetState() {
-		// Clear selection
 		state.selectedSlot = null;
-		// Keep field selections - they're valid across all days
 		state.availableSlots = [];
 		state.hasFoundSlots = false;
 
-		// Clear timers
 		if (state.prepTimer) clearTimeout(state.prepTimer);
 		if (state.bookingTimer) clearTimeout(state.bookingTimer);
 		if (state.scanInterval) clearInterval(state.scanInterval);
@@ -698,7 +641,6 @@
 		stopCountdown();
 		stopTimeChecking();
 
-		// Clear scheduled times and booking state
 		state.prepTime = null;
 		state.bookingTime = null;
 		state.scanInterval = null;
@@ -706,7 +648,6 @@
 		state.selectedDate = null;
 		state.canBookImmediately = false;
 
-		// Reset UI
 		renderSlots();
 		renderFieldSelector();
 		updateStatus('idle', 'Scanning for slots...');
@@ -722,8 +663,6 @@
 				'<div class="sa-empty">No slots detected. Select a day to see available slots.</div>';
 			return;
 		}
-
-		// Organize slots by time and type (indoor/outdoor)
 		const slotsByTime = {};
 		let hasIndoor = false;
 		let hasOutdoor = false;
@@ -814,6 +753,9 @@
 		});
 	}
 
+	/**
+	 * @param {{button: HTMLButtonElement, time: string, title: string}} slot
+	 */
 	function selectSlot(slot) {
 		state.selectedSlot = slot;
 		renderSlots();
@@ -900,6 +842,10 @@
 		fieldSelector.classList.add('visible');
 	}
 
+	/**
+	 * @param {number} fieldNum
+	 * @param {string} fieldType
+	 */
 	function selectField(fieldNum, fieldType) {
 		if (fieldType === 'indoor') {
 			state.selectedIndoorField = fieldNum;
@@ -908,13 +854,11 @@
 		}
 		renderFieldSelector();
 
-		// If a slot is selected, update scheduling
 		if (state.selectedSlot) {
 			scheduleBooking();
 		}
 	}
 
-	// ===== SLOT DETECTION =====
 	function scanForSlots() {
 		const slotElements = document.querySelectorAll(
 			CONFIG.SELECTORS.bookableSlot,
@@ -922,18 +866,23 @@
 		const slots = [];
 
 		slotElements.forEach((element) => {
-			const details = findBookableSlotDetails(element);
-			if (details) {
-				slots.push(details);
+			const button = element.querySelector(CONFIG.SELECTORS.slotButton);
+			const time = element
+				.querySelector(CONFIG.SELECTORS.slotTime)
+				?.textContent.trim();
+			const title = element
+				.querySelector(CONFIG.SELECTORS.slotTitle)
+				?.textContent.trim();
+			if (button && time && title) {
+				slots.push({ button, time, title });
 			}
 		});
 
 		state.availableSlots = slots;
 		renderSlots();
-		renderFieldSelector(); // Render field selector when slots are found
+		renderFieldSelector();
 
 		if (slots.length > 0) {
-			// Found slots! Stop the interval scanning
 			if (state.scanInterval) {
 				clearInterval(state.scanInterval);
 				state.scanInterval = null;
@@ -945,7 +894,6 @@
 				`Found ${slots.length} available slot${slots.length > 1 ? 's' : ''}. Select one to begin.`,
 			);
 		} else {
-			// Only update status if we haven't found slots yet
 			if (!state.hasFoundSlots) {
 				updateStatus('idle', 'Scanning for slots...');
 			}
@@ -953,13 +901,10 @@
 	}
 
 	function setupSlotMonitoring() {
-		// Start periodic scanning until we find slots
 		updateStatus('idle', 'Scanning for slots...');
 
-		// Initial immediate scan
 		scanForSlots();
 
-		// Keep scanning every 2 seconds until we find slots
 		state.scanInterval = setInterval(() => {
 			if (!state.hasFoundSlots) {
 				console.log('Periodic scan for slots...');
@@ -967,7 +912,6 @@
 			}
 		}, 2000);
 
-		// Monitor for changes to the slot list
 		const slotListContainer = document.querySelector(
 			CONFIG.SELECTORS.bookableSlotList,
 		);
@@ -976,11 +920,9 @@
 			const observer = new MutationObserver(() => {
 				console.log('Slot list changed, resetting state and rescanning...');
 
-				// Clear selection and timers since content changed
 				if (state.selectedSlot) {
 					resetState();
 
-					// Restart scanning
 					state.scanInterval = setInterval(() => {
 						if (!state.hasFoundSlots) {
 							scanForSlots();
@@ -989,11 +931,9 @@
 
 					setTimeout(scanForSlots, 500);
 				} else {
-					// Just reset found flag if nothing was selected
 					state.hasFoundSlots = false;
 					scanForSlots();
 
-					// Restart interval scanning if needed
 					if (!state.scanInterval) {
 						state.scanInterval = setInterval(() => {
 							if (!state.hasFoundSlots) {
@@ -1010,8 +950,6 @@
 			});
 		}
 
-		// Also monitor day selector clicks using event delegation
-		// This works even if buttons are dynamically added
 		document.addEventListener('click', (event) => {
 			const daySelectorButton = event.target.closest(
 				CONFIG.SELECTORS.daySelectorButtons,
@@ -1022,10 +960,8 @@
 					'Day selector clicked, clearing all state and rescanning...',
 				);
 
-				// Use the reset function to clear everything
 				resetState();
 
-				// Start scanning again
 				state.scanInterval = setInterval(() => {
 					if (!state.hasFoundSlots) {
 						scanForSlots();
@@ -1037,7 +973,9 @@
 		});
 	}
 
-	// ===== TIME-BASED SCHEDULING =====
+	/**
+	 * @returns {Date}
+	 */
 	function getSelectedDate() {
 		// Try to find the active day selector button
 		const activeButton = document.querySelector(
@@ -1051,28 +989,27 @@
 				return new Date(dateAttr);
 			}
 
-			// Try to parse from button text
 			const buttonText = activeButton.textContent.trim();
-			// Look for patterns like "Do 6-11" or similar
 			const dateMatch = buttonText.match(/(\d+)-(\d+)/);
 			if (dateMatch) {
 				const day = parseInt(dateMatch[1]);
-				const month = parseInt(dateMatch[2]) - 1; // Month is 0-indexed
+				const month = parseInt(dateMatch[2]) - 1;
 				const year = new Date().getFullYear();
 				return new Date(year, month, day);
 			}
 		}
 
-		// Fallback: assume today if we can't determine
 		console.warn('Could not determine selected date, defaulting to today');
 		return new Date();
 	}
 
+	/**
+	 * @returns {boolean}
+	 */
 	function canBookImmediately() {
 		const now = new Date();
 		const selectedDate = getSelectedDate();
 
-		// Normalize dates to compare just the day (ignore time)
 		const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 		const tomorrow = new Date(today);
 		tomorrow.setDate(tomorrow.getDate() + 1);
@@ -1082,28 +1019,26 @@
 			selectedDate.getDate(),
 		);
 
-		// Check if it's already 9 AM or later today
 		const currentHour = now.getHours();
 		const currentMinute = now.getMinutes();
 		const isPast9AM =
 			currentHour > 9 || (currentHour === 9 && currentMinute >= 0);
 
-		// Scenario 1: Selected date is today
 		if (selectedDay.getTime() === today.getTime()) {
 			return true;
 		}
 
-		// Scenario 2: Selected date is tomorrow AND it's already past 9 AM today
 		if (selectedDay.getTime() === tomorrow.getTime() && isPast9AM) {
 			return true;
 		}
 
-		// Otherwise, booking needs to be scheduled
 		return false;
 	}
 
+	/**
+	 * @returns {Date}
+	 */
 	function getBookingOpenTime() {
-		// Booking opens at 9 AM the day before the selected date
 		const selectedDate = getSelectedDate();
 		const bookingOpenDate = new Date(selectedDate);
 		bookingOpenDate.setDate(bookingOpenDate.getDate() - 1);
@@ -1112,24 +1047,21 @@
 		return bookingOpenDate;
 	}
 
-	// ===== TIME CHECKING & RECOVERY =====
 	/**
-	 * Check if scheduled prep or booking time has passed (handles sleep/wake)
+	 * Checks if scheduled times have passed (handles sleep/wake recovery)
 	 */
 	function checkScheduledTimes() {
 		if (!state.selectedSlot) return;
-		if (state.canBookImmediately) return; // No scheduled times
-		if (state.status === 'success' || state.status === 'error') return; // Already done
+		if (state.canBookImmediately) return;
+		if (state.status === 'success' || state.status === 'error') return;
 
 		const now = Date.now();
 
-		// Check if we missed the booking time
 		if (state.bookingTime && now >= state.bookingTime) {
 			if (state.status !== 'booking' && state.status !== 'ready') {
 				console.warn(
 					'⚠️ Booking time passed! Executing now (recovered from sleep/throttle)',
 				);
-				// Clear timers since we're executing manually
 				if (state.prepTimer) clearTimeout(state.prepTimer);
 				if (state.bookingTimer) clearTimeout(state.bookingTimer);
 				executeBooking();
@@ -1137,13 +1069,11 @@
 			return;
 		}
 
-		// Check if we missed the prep time
 		if (state.prepTime && now >= state.prepTime) {
 			if (state.status === 'idle') {
 				console.warn(
 					'⚠️ Prep time passed! Preparing now (recovered from sleep/throttle)',
 				);
-				// Clear prep timer since we're executing manually
 				if (state.prepTimer) clearTimeout(state.prepTimer);
 				prepareBooking();
 			}
@@ -1151,27 +1081,17 @@
 	}
 
 	/**
-	 * Start periodic time checking (every 20 seconds)
-	 * This is a safety net - the prep step at 8:59 isn't time-critical,
-	 * only the 9:00 booking matters. 20 seconds gives 3 chances in the
-	 * critical minute before booking.
+	 * Start periodic time checking (20 second intervals for sleep/wake safety net)
 	 */
 	function startTimeChecking() {
-		// Clear any existing interval
 		if (state.timeCheckInterval) {
 			clearInterval(state.timeCheckInterval);
 		}
 
-		// Check every 20 seconds
 		state.timeCheckInterval = setInterval(checkScheduledTimes, 20000);
-
-		// Also check immediately
 		checkScheduledTimes();
 	}
 
-	/**
-	 * Stop periodic time checking
-	 */
 	function stopTimeChecking() {
 		if (state.timeCheckInterval) {
 			clearInterval(state.timeCheckInterval);
@@ -1185,7 +1105,6 @@
 			return;
 		}
 
-		// Check if a matching field is selected
 		const selectedField = getSelectedFieldForSlot();
 		if (!selectedField) {
 			const slotType = state.selectedSlot.title.toLowerCase().includes('indoor')
@@ -1195,49 +1114,35 @@
 			return;
 		}
 
-		// Clear any existing timers
 		if (state.prepTimer) clearTimeout(state.prepTimer);
 		if (state.bookingTimer) clearTimeout(state.bookingTimer);
 		stopCountdown();
 		stopTimeChecking();
 
-		// Determine if we can book immediately or need to schedule
 		state.selectedDate = getSelectedDate();
 		state.canBookImmediately = canBookImmediately();
 
 		if (state.canBookImmediately) {
-			// Booking is available now - show "Book Now" button without countdown
-			updateStatus(
-				'idle',
-				`✅ Ready to book`,
-				true, // Show "Book Now" button
-			);
+			updateStatus('idle', `✅ Ready to book`, true);
 			console.log('Booking available immediately');
 		} else {
-			// Booking needs to be scheduled
 			const bookingOpenTime = getBookingOpenTime();
 			const now = Date.now();
-			const prepDelay = bookingOpenTime.getTime() - 60000 - now; // 1 minute before booking opens
+			const prepDelay = bookingOpenTime.getTime() - 60000 - now;
 			const bookingDelay = bookingOpenTime.getTime() - now;
 
-			// Store the exact times
 			state.prepTime = now + prepDelay;
 			state.bookingTime = now + bookingDelay;
 
-			// Schedule preparation
 			state.prepTimer = setTimeout(() => {
 				prepareBooking();
 			}, prepDelay);
 
-			// Schedule actual booking
 			state.bookingTimer = setTimeout(() => {
 				executeBooking();
 			}, bookingDelay);
 
-			// Start the countdown display
 			startCountdown();
-
-			// Start time checking for sleep/wake recovery
 			startTimeChecking();
 
 			const bookingDate = new Date(state.bookingTime);
@@ -1327,23 +1232,17 @@
 		}, 500);
 	}
 
-	// ===== INITIALIZATION =====
 	function init() {
 		console.log('Sportkot Automator: Initializing...');
 
-		// Wait for page to be ready
 		if (document.readyState === 'loading') {
 			document.addEventListener('DOMContentLoaded', init);
 			return;
 		}
 
-		// Create the overlay UI
 		createOverlay();
-
-		// Setup monitoring for slots
 		setupSlotMonitoring();
 
-		// Setup visibility change listener for sleep/wake detection
 		document.addEventListener('visibilitychange', () => {
 			if (document.visibilityState === 'visible') {
 				console.log('Tab became visible - checking scheduled times...');
@@ -1354,6 +1253,5 @@
 		console.log('Sportkot Automator: Ready!');
 	}
 
-	// Start the script
 	init();
 })();
