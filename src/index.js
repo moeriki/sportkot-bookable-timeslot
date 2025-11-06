@@ -585,65 +585,20 @@
 		if (state.prepTimer) clearTimeout(state.prepTimer);
 		if (state.bookingTimer) clearTimeout(state.bookingTimer);
 		stopCountdown();
+		stopTimeChecking();
 
 		console.log('Manual booking triggered!', {
 			slot: state.selectedSlot,
 			field: selectedField,
 		});
 
-		updateStatus('preparing', '🔄 Preparing booking...');
+		// Execute preparation immediately
+		prepareBooking();
 
-		state.selectedSlot.button.click();
-
-		// Wait for modal to appear, then fill it out
-		setTimeout(async () => {
-			const modalDetails = findProductModalDetail();
-			if (!modalDetails) {
-				updateStatus(
-					'error',
-					'❌ Could not prepare booking. Please check manually.',
-				);
-				return;
-			}
-
-			// Select the field in the dropdown
-			const fieldSelected = await selectFieldInModal(selectedField);
-
-			if (!fieldSelected) {
-				updateStatus(
-					'error',
-					'❌ Could not select field in dropdown. Please check manually.',
-				);
-				return;
-			}
-
-			updateStatus('ready', '✅ Ready! Executing booking...');
-
-			// Wait a moment, then execute booking
-			setTimeout(() => {
-				updateStatus('booking', '🚀 Booking NOW!');
-
-				const modalDetailsForBooking = findProductModalDetail();
-				if (!modalDetailsForBooking) {
-					updateStatus(
-						'error',
-						'❌ Could not complete booking. Please check manually!',
-					);
-					return;
-				}
-
-				// Click the booking button
-				modalDetailsForBooking.button.click();
-
-				// Give feedback
-				setTimeout(() => {
-					updateStatus(
-						'success',
-						`🎉 Booking completed for ${state.selectedSlot.time} (Field ${selectedField})! Check if successful.`,
-					);
-				}, 500);
-			}, 1500); // Wait 1.5s between prep and booking
-		}, 1000);
+		// Schedule booking execution after prep completes (1s modal open + 1.5s wait)
+		setTimeout(() => {
+			executeBooking();
+		}, 2500);
 	}
 
 	function resetState() {
