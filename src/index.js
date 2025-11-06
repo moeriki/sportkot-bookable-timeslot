@@ -256,7 +256,7 @@
 				.sa-status-text {
 					flex: 1;
 				}
-				.sa-book-now-btn {
+				.sa-book-now-button {
 					background: #28a745;
 					color: white;
 					border: none;
@@ -268,23 +268,23 @@
 					transition: background 0.2s;
 					white-space: nowrap;
 				}
-				.sa-book-now-btn.secondary {
+				.sa-book-now-button.secondary {
 					background: #6c757d;
 					color: white;
 				}
-				.sa-book-now-btn.secondary:hover {
+				.sa-book-now-button.secondary:hover {
 					background: #5a6268;
 				}
-				.sa-book-now-btn.secondary:active {
+				.sa-book-now-button.secondary:active {
 					background: #545b62;
 				}
-				.sa-book-now-btn:hover {
+				.sa-book-now-button:hover {
 					background: #218838;
 				}
-				.sa-book-now-btn:active {
+				.sa-book-now-button:active {
 					background: #1e7e34;
 				}
-				.sa-book-now-btn:disabled {
+				.sa-book-now-button:disabled {
 					background: #6c757d;
 					cursor: not-allowed;
 					opacity: 0.6;
@@ -425,7 +425,7 @@
 			</div>
 		`;
 
-		document.body.appendChild(overlay);
+		document.body.append(overlay);
 
 		return overlay;
 	}
@@ -437,31 +437,31 @@
 	 */
 	function updateStatus(status, message, showBookNowButton = false) {
 		state.status = status;
-		const statusEl = document.getElementById('sa-status');
-		if (statusEl) {
-			statusEl.className = `sa-status sa-status-${status}`;
+		const statusElement = document.querySelector('#sa-status');
+		if (statusElement) {
+			statusElement.className = `sa-status sa-status-${status}`;
 
 			// Create status text element
 			const textSpan =
-				statusEl.querySelector('.sa-status-text') ||
+				statusElement.querySelector('.sa-status-text') ||
 				document.createElement('span');
 			textSpan.className = 'sa-status-text';
 			textSpan.textContent = message;
 
 			// Clear and rebuild
-			statusEl.innerHTML = '';
-			statusEl.appendChild(textSpan);
+			statusElement.innerHTML = '';
+			statusElement.append(textSpan);
 
 			// Add "Book Now" button if requested
 			if (showBookNowButton) {
-				const bookNowBtn = document.createElement('button');
-				bookNowBtn.className =
+				const bookNowButton = document.createElement('button');
+				bookNowButton.className =
 					showBookNowButton === 'secondary'
-						? 'sa-book-now-btn secondary'
-						: 'sa-book-now-btn';
-				bookNowBtn.textContent = 'Book Now';
-				bookNowBtn.onclick = bookNowManual;
-				statusEl.appendChild(bookNowBtn);
+						? 'sa-book-now-button secondary'
+						: 'sa-book-now-button';
+				bookNowButton.textContent = 'Book Now';
+				bookNowButton.addEventListener('click', bookNowManual);
+				statusElement.append(bookNowButton);
 			}
 		}
 	}
@@ -482,14 +482,16 @@
 				return `${minutes}m ${seconds}s`;
 			}
 			return `${hours}h ${minutes}m`;
-		} else if (minutes > 0) {
+		}
+
+		if (minutes > 0) {
 			if (showSeconds) {
 				return `${minutes}m ${seconds}s`;
 			}
 			return `${minutes}m`;
-		} else {
-			return `${seconds}s`;
 		}
+
+		return `${seconds}s`;
 	}
 
 	function updateCountdown() {
@@ -669,9 +671,8 @@
 	}
 
 	function renderSlots() {
-		const slotsContainer = document.getElementById('sa-slots');
+		const slotsContainer = document.querySelector('#sa-slots');
 		if (!slotsContainer) return;
-
 		if (state.availableSlots.length === 0) {
 			slotsContainer.className = 'sa-slots one-column';
 			slotsContainer.innerHTML =
@@ -708,7 +709,7 @@
 			: 'sa-slots one-column';
 
 		// Sort times
-		const times = Object.keys(slotsByTime).sort();
+		const times = Object.keys(slotsByTime).toSorted();
 
 		// Build HTML
 		let html = '';
@@ -760,9 +761,9 @@
 		slotsContainer.innerHTML = html;
 
 		// Add click handlers
-		slotsContainer.querySelectorAll('.sa-slot').forEach((el) => {
-			el.addEventListener('click', () => {
-				const index = parseInt(el.dataset.slotIndex);
+		slotsContainer.querySelectorAll('.sa-slot').forEach((element) => {
+			element.addEventListener('click', () => {
+				const index = parseInt(element.dataset.slotIndex, 10);
 				selectSlot(state.availableSlots[index]);
 			});
 		});
@@ -778,8 +779,8 @@
 	}
 
 	function renderFieldSelector() {
-		const fieldSelector = document.getElementById('sa-field-selector');
-		const fieldGroups = document.getElementById('sa-field-groups');
+		const fieldSelector = document.querySelector('#sa-field-selector');
+		const fieldGroups = document.querySelector('#sa-field-groups');
 
 		if (!fieldSelector || !fieldGroups) return;
 
@@ -845,10 +846,10 @@
 		fieldGroups.innerHTML = html;
 
 		// Add click handlers
-		fieldGroups.querySelectorAll('.sa-field-option').forEach((el) => {
-			el.addEventListener('click', () => {
-				const fieldNum = parseInt(el.dataset.field);
-				const fieldType = el.dataset.fieldType;
+		fieldGroups.querySelectorAll('.sa-field-option').forEach((element) => {
+			element.addEventListener('click', () => {
+				const fieldNum = parseInt(element.dataset.field, 10);
+				const fieldType = element.dataset.fieldType;
 				selectField(fieldNum, fieldType);
 			});
 		});
@@ -908,10 +909,8 @@
 				'idle',
 				`Found ${slots.length} available slot${slots.length > 1 ? 's' : ''}. Select one to begin.`,
 			);
-		} else {
-			if (!state.hasFoundSlots) {
-				updateStatus('idle', 'Scanning for slots...');
-			}
+		} else if (!state.hasFoundSlots) {
+			updateStatus('idle', 'Scanning for slots...');
 		}
 	}
 
@@ -999,7 +998,7 @@
 
 		if (activeButton) {
 			// Try to extract date from data attributes
-			const dateAttr = activeButton.getAttribute('data-date');
+			const dateAttr = activeButton.dataset.date;
 			if (dateAttr) {
 				return new Date(dateAttr);
 			}
@@ -1007,8 +1006,8 @@
 			const buttonText = activeButton.textContent.trim();
 			const dateMatch = buttonText.match(/(\d+)-(\d+)/);
 			if (dateMatch) {
-				const day = parseInt(dateMatch[1]);
-				const month = parseInt(dateMatch[2]) - 1;
+				const day = parseInt(dateMatch[1], 10);
+				const month = parseInt(dateMatch[2], 10) - 1;
 				const year = new Date().getFullYear();
 				return new Date(year, month, day);
 			}
@@ -1084,14 +1083,12 @@
 			return;
 		}
 
-		if (state.prepTime && now >= state.prepTime) {
-			if (state.status === 'idle') {
-				console.warn(
-					'⚠️ Prep time passed! Preparing now (recovered from sleep/throttle)',
-				);
-				if (state.prepTimer) clearTimeout(state.prepTimer);
-				prepareBooking();
-			}
+		if (state.prepTime && now >= state.prepTime && state.status === 'idle') {
+			console.warn(
+				'⚠️ Prep time passed! Preparing now (recovered from sleep/throttle)',
+			);
+			if (state.prepTimer) clearTimeout(state.prepTimer);
+			prepareBooking();
 		}
 	}
 

@@ -1,4 +1,17 @@
 {
 	"ignorePatterns": ["node_modules/"],
-	"plugins": ["eslint", "oxc", "unicorn"]
+	"plugins": ["eslint", "oxc", "unicorn"],
+	"env": {
+		"browser": true
+	},
+	"categories": {
+		"correctness": "error",
+		"perf": "warn",
+		"suspicious": "warn",
+		"pedantic": "warn"
+	},
+	"rules": {
+		"eslint/max-lines": "off",
+		"eslint/max-lines-per-function": "off"
+	}
 }
