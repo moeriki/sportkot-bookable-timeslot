@@ -8,9 +8,6 @@ importers:
 
   .:
     devDependencies:
-      oxfmt:
-        specifier: 0.9.0
-        version: 0.9.0
       oxlint:
         specifier: ^1.25.0
         version: 1.25.0
@@ -22,46 +19,6 @@ importers:
         version: 2.5.19(prettier@3.6.2)
 
 packages:
-
-  '@oxfmt/darwin-arm64@0.9.0':
-    resolution: {integrity: sha512-1D9z55GMMqceq3VT0rNVQjBGanXvwMoNUmkDyXxcigfu+qSVt+qmcJbZwttJfGx9GSlR+ilnAxHODLdcfSShMQ==}
-    cpu: [arm64]
-    os: [darwin]
-
-  '@oxfmt/darwin-x64@0.9.0':
-    resolution: {integrity: sha512-WI/2AsQz058vcpPCcLk3R5gFBlS3kWrzZGGlZq8UljB8Jzn8/OH6+UEZxiDsFJd/ilbBxPpgAgPxna3z8Is4bw==}
-    cpu: [x64]
-    os: [darwin]
-
-  '@oxfmt/linux-arm64-gnu@0.9.0':
-    resolution: {integrity: sha512-Sj/mbXJZ1vtCvGcmond5zfW69TA1xFLkDl99aje4JazyMsrEK1PdknJClFKfVIBVPNzxfWa/DixAjFzbJoNQ7A==}
-    cpu: [arm64]
-    os: [linux]
-
-  '@oxfmt/linux-arm64-musl@0.9.0':
-    resolution: {integrity: sha512-t1+MPQ6xkw6Xy0aNsviunHqnUWKrUgIskR+x4OLUSs+ZxzS2HPqTrYzQJWJp/2wq4lHpF4NsfNBkmXq751YA6A==}
-    cpu: [arm64]
-    os: [linux]
-
-  '@oxfmt/linux-x64-gnu@0.9.0':
-    resolution: {integrity: sha512-/jn3JBBFZb3rw0L+ZazDi757a7/fsI7bxHKUeSLegt4Jlu3EvG1h+zMG5ETsVE0f8ULAuwjsYA/ujGOQxzHRNQ==}
-    cpu: [x64]
-    os: [linux]
-
-  '@oxfmt/linux-x64-musl@0.9.0':
-    resolution: {integrity: sha512-K10t6rNnogmytxbBmdcJnZnSH34kMvTbKI7Kyi0AKv9v7hKUm1kE9hq9VmNyo0KLuu+YYDIMxmQ3Mm5DY2wLyg==}
-    cpu: [x64]
-    os: [linux]
-
-  '@oxfmt/win32-arm64@0.9.0':
-    resolution: {integrity: sha512-IaVN68uowQThhSkbtfKo9Hm4I/y3WHom115tYUXeR6NMi/JDTrBpcrF7v0Tg6b6LbpT6LeXSYVr2cO2IVQwF5A==}
-    cpu: [arm64]
-    os: [win32]
-
-  '@oxfmt/win32-x64@0.9.0':
-    resolution: {integrity: sha512-77OiFJ9lpc7ICmHMSN+belxHPDMOu9U7N/LEp40YuC219QWClt6E5Ved6GwNV5bsDCTxTrpH1/3LhxBNKC66Xg==}
-    cpu: [x64]
-    os: [win32]
 
   '@oxlint/darwin-arm64@1.25.0':
     resolution: {integrity: sha512-OLx4XyUv5SO7k8y5FzJIoTKan+iKK53T1Ws8fBIl4zblUIWI66ZIqSVG2A2rxOBA7XfINqCz8UipGzOW9yzKcg==}
@@ -131,11 +88,6 @@ packages:
     resolution: {integrity: sha512-+Pgi+vMuUNkJyExiMBt5IlFoMyKnr5zhJ4Uspz58WOhBF5QoIZkFyNHIbBAtHwzVAgk5RtndVNsDRN61/mmDqg==}
     engines: {node: '>=12'}
 
-  oxfmt@0.9.0:
-    resolution: {integrity: sha512-RVMw8kqZjCDCFxBZyDK4VW8DHxmSHV0pRky7LoLq9JL3ge4kelT0UB8GS0nVTZIteqOJ9rfwPxSZRUVXSX/n0w==}
-    engines: {node: ^20.19.0 || >=22.12.0}
-    hasBin: true
-
   oxlint@1.25.0:
     resolution: {integrity: sha512-O6iJ9xeuy9eQCi8/EghvsNO6lzSaUPs0FR1uLy51Exp3RkVpjvJKyPPhd9qv65KLnfG/BNd2HE/rH0NbEfVVzA==}
     engines: {node: ^20.19.0 || >=22.12.0}
@@ -186,30 +138,6 @@ packages:
 
 snapshots:
 
-  '@oxfmt/darwin-arm64@0.9.0':
-    optional: true
-
-  '@oxfmt/darwin-x64@0.9.0':
-    optional: true
-
-  '@oxfmt/linux-arm64-gnu@0.9.0':
-    optional: true
-
-  '@oxfmt/linux-arm64-musl@0.9.0':
-    optional: true
-
-  '@oxfmt/linux-x64-gnu@0.9.0':
-    optional: true
-
-  '@oxfmt/linux-x64-musl@0.9.0':
-    optional: true
-
-  '@oxfmt/win32-arm64@0.9.0':
-    optional: true
-
-  '@oxfmt/win32-x64@0.9.0':
-    optional: true
-
   '@oxlint/darwin-arm64@1.25.0':
     optional: true
 
@@ -247,17 +175,6 @@ snapshots:
   git-hooks-list@4.1.1: {}
 
   is-plain-obj@4.1.0: {}
-
-  oxfmt@0.9.0:
-    optionalDependencies:
-      '@oxfmt/darwin-arm64': 0.9.0
-      '@oxfmt/darwin-x64': 0.9.0
-      '@oxfmt/linux-arm64-gnu': 0.9.0
-      '@oxfmt/linux-arm64-musl': 0.9.0
-      '@oxfmt/linux-x64-gnu': 0.9.0
-      '@oxfmt/linux-x64-musl': 0.9.0
-      '@oxfmt/win32-arm64': 0.9.0
-      '@oxfmt/win32-x64': 0.9.0
 
   oxlint@1.25.0:
     optionalDependencies:
