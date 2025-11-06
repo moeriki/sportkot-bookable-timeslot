@@ -51,6 +51,20 @@
 	};
 
 	/**
+	 * @returns {{selectInput: HTMLInputElement, button: HTMLButtonElement}|undefined}
+	 */
+	function findProductModalDetail() {
+		const selectInput = document.querySelector(
+			CONFIG.SELECTORS.modalProductSelect,
+		);
+		const button = document.querySelector(CONFIG.SELECTORS.modalBookButton);
+		if (!selectInput || !button) {
+			return;
+		}
+		return { selectInput, button };
+	}
+
+	/**
 	 * @param {number} fieldNumber
 	 * @returns {Promise<boolean>}
 	 */
